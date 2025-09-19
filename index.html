@@ -276,6 +276,114 @@
             backgroundLoaded = true;
         };
 
+        // Music system
+        let currentTrack = null;
+        let nextTrack = null;
+        let trackQueue = [];
+        let musicPaused = false;
+        let nextTrackTimer = null;
+        let pauseTimer = null;
+        const trackCount = 5;
+        let musicEnabled = false;
+
+        function shuffleTracks() {
+            trackQueue = [];
+            for (let i = 1; i <= trackCount; i++) {
+                trackQueue.push(i);
+            }
+            // Fisher-Yates shuffle
+            for (let i = trackQueue.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [trackQueue[i], trackQueue[j]] = [trackQueue[j], trackQueue[i]];
+            }
+        }
+
+        function loadTrack(trackNumber) {
+            const audio = new Audio();
+            audio.src = `assets/track_${trackNumber.toString().padStart(2, '0')}.mp3`;
+            audio.volume = 0.7;
+            audio.loop = false;
+            return audio;
+        }
+
+        function playNextTrack() {
+            if (!musicEnabled || !gameRunning) return;
+
+            if (trackQueue.length === 0) {
+                shuffleTracks(); // Reshuffle when we've played all tracks
+            }
+
+            const nextTrackNum = trackQueue.shift();
+
+            if (nextTrack && nextTrack.trackNumber === nextTrackNum) {
+                // Next track is already loaded
+                currentTrack = nextTrack;
+                nextTrack = null;
+            } else {
+                // Load the track now
+                currentTrack = loadTrack(nextTrackNum);
+            }
+
+            currentTrack.trackNumber = nextTrackNum;
+
+            currentTrack.onended = () => {
+                if (!musicEnabled || !gameRunning) return;
+                // 2 second pause before next track
+                pauseTimer = setTimeout(() => {
+                    playNextTrack();
+                }, 2000);
+            };
+
+            currentTrack.onerror = () => {
+                console.warn(`Failed to load track ${nextTrackNum}, skipping...`);
+                playNextTrack();
+            };
+
+            currentTrack.play().catch(e => {
+                console.warn(`Failed to play track ${nextTrackNum}:`, e);
+            });
+
+            // Start loading next track after 1 minute
+            nextTrackTimer = setTimeout(() => {
+                if (trackQueue.length === 0) {
+                    shuffleTracks();
+                }
+                const upcomingTrackNum = trackQueue[0];
+                nextTrack = loadTrack(upcomingTrackNum);
+            }, 60000);
+        }
+
+        function startMusic() {
+            if (musicEnabled) return;
+            musicEnabled = true;
+            shuffleTracks();
+            playNextTrack();
+        }
+
+        function stopMusic() {
+            musicEnabled = false;
+
+            if (currentTrack) {
+                currentTrack.pause();
+                currentTrack = null;
+            }
+
+            if (nextTrack) {
+                nextTrack.pause();
+                nextTrack = null;
+            }
+
+            if (nextTrackTimer) {
+                clearTimeout(nextTrackTimer);
+                nextTrackTimer = null;
+            }
+
+            if (pauseTimer) {
+                clearTimeout(pauseTimer);
+                pauseTimer = null;
+            }
+        }
+
         // UI Animation states
         let ammoShake = 0;
         let ammoPulse = 0;
@@ -855,8 +963,8 @@
             tunnelOffset += dt * 5;
             gameTime += dt;
 
-            // Background rises 1 pixel per second (much faster than before)
-            backgroundOffset += dt * 1;
+            // Background rises 1 pixel per second
+            backgroundOffset += dt;
 
             // Keyboard movement
             if (moveLeft) {
@@ -940,6 +1048,7 @@
 
                     if (player.level <= 0) {
                         gameRunning = false;
+                        stopMusic(); // Stop music on game over
                         // Game over - just reload without the annoying popup
                         setTimeout(() => {
                             location.reload();
@@ -1244,6 +1353,7 @@
 
         function showLevelMultiplier() {
             gameRunning = false;
+            stopMusic(); // Stop music on victory
             const finalLevel = player.level;
             const baseScore = player.score;
 
@@ -1341,6 +1451,7 @@
             backgroundOffset = 0; // Reset background progression
 
             gameRunning = true;
+            startMusic(); // Start background music
             requestAnimationFrame(gameLoop);
         }
 
