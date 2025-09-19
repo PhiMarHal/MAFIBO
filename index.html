@@ -221,6 +221,9 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
+        // Base URL for all assets
+        const BASE_URL = "https://mafibo.loiyaa.com/";
+
         // Set fixed resolution with scaling
         function resizeCanvas() {
             canvas.width = 800;
@@ -260,9 +263,11 @@
         let enemies = [];
         let coins = [];
         let bullets = [];
+        let bossProjectiles = []; // New: boss projectiles that can't be destroyed
         let gates = [];
         let gunPickups = [];
         let boss = null;
+        let bossDeathAnimation = null; // New: boss death animation state
         let congratulations = [];
         let ammoDisplays = [];
         let enemySparks = [];
@@ -270,7 +275,7 @@
 
         // Background image
         let backgroundImage = new Image();
-        backgroundImage.src = 'assets/background.png';
+        backgroundImage.src = BASE_URL + 'assets/background.png';
         let backgroundLoaded = false;
         backgroundImage.onload = function () {
             backgroundLoaded = true;
@@ -283,7 +288,7 @@
         let musicPaused = false;
         let nextTrackTimer = null;
         let pauseTimer = null;
-        const trackCount = 5;
+        const trackCount = 6; // Updated for track_06
         let musicEnabled = false;
 
         function shuffleTracks() {
@@ -300,7 +305,7 @@
 
         function loadTrack(trackNumber) {
             const audio = new Audio();
-            audio.src = `assets/track_${trackNumber.toString().padStart(2, '0')}.mp3`;
+            audio.src = BASE_URL + `assets/track_${trackNumber.toString().padStart(2, '0')}.mp3`;
             audio.volume = 0.7;
             audio.loop = false;
             return audio;
@@ -635,6 +640,26 @@
             }
         }
 
+        function drawBossProjectile(projectile) {
+            const pos = project3D(projectile.x, -10, projectile.z);
+            if (pos.scale > 0) {
+                const size = 18 * pos.scale;
+
+                const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, size * 2);
+                gradient.addColorStop(0, 'rgba(255, 0, 0, 1)');
+                gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, size * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
         function generateArithmeticGate() {
             // Generate range based on number of guns: 5-20 * guns
             const minValue = 5 * player.guns;
@@ -773,6 +798,26 @@
                 ctx.font = `bold ${Math.max(16, 24 * pos.scale)}px 'Press Start 2P', monospace`;
                 ctx.textAlign = 'center';
                 ctx.fillText('LEVEL 99 REMIX BOSS', pos.x, pos.y - size - 80);
+            }
+        }
+
+        function drawBossDeathAnimation() {
+            if (!bossDeathAnimation) return;
+
+            const pos = project3D(bossDeathAnimation.x, -100, bossDeathAnimation.z);
+            if (pos.scale > 0.05) {
+                const baseSize = 200 * pos.scale;
+                const size = baseSize * bossDeathAnimation.scale;
+
+                ctx.fillStyle = '#8B0000';
+                ctx.fillRect(pos.x - size / 2, pos.y - size, size, size);
+
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(pos.x - size / 2.5, pos.y - size * 0.9, size * 0.8, size * 0.7);
+
+                ctx.fillStyle = '#ffff00';
+                ctx.fillRect(pos.x - size / 3, pos.y - size * 0.7, size / 4, size / 4);
+                ctx.fillRect(pos.x + size / 12, pos.y - size * 0.7, size / 4, size / 4);
             }
         }
 
@@ -1025,10 +1070,19 @@
                 if (boss && Math.abs(bullet.x - boss.x) < 0.3 && Math.abs(bullet.z - boss.z) < 150) {
                     boss.hp -= player.damage;
                     if (boss.hp <= 0) {
+                        // Start boss death animation
+                        bossDeathAnimation = {
+                            x: boss.x,
+                            z: boss.z,
+                            phase: 'growing', // 'growing' or 'squashing'
+                            scale: 1.0,
+                            timer: 0,
+                            duration: 2000 // 2 second animation
+                        };
                         boss = null;
                         setTimeout(() => {
                             showLevelMultiplier();
-                        }, 100);
+                        }, 2000); // Wait for animation to complete
                     }
                     return false;
                 }
@@ -1048,8 +1102,7 @@
 
                     if (player.level <= 0) {
                         gameRunning = false;
-                        stopMusic(); // Stop music on game over
-                        // Game over - just reload without the annoying popup
+                        // Game over - just reload, keep music playing
                         setTimeout(() => {
                             location.reload();
                         }, 100);
@@ -1172,12 +1225,17 @@
                     player.level++;
                     player.gatesPassed++;
 
+                    // Don't level up past 100 to prevent farming point multipliers
+                    if (player.level > 100) {
+                        player.level = 100;
+                    }
+
                     if (player.gatesPassed >= 100 && !boss) {
                         boss = {
                             x: 0,
                             z: 1500,
-                            hp: 100,
-                            maxHp: 100,
+                            hp: 1000, // Dramatically increased HP
+                            maxHp: 1000,
                             shootTimer: 0
                         };
                         enemies = [];
@@ -1194,15 +1252,39 @@
 
                 boss.shootTimer -= dt;
                 if (boss.shootTimer <= 0) {
-                    enemies.push({
-                        x: boss.x,
-                        z: boss.z - 200,
-                        speed: TUNNEL_SPEED * 1.5,
-                        hp: 1
+                    // Fire red projectiles instead of enemies
+                    const spread = Math.random() * 0.6 - 0.3; // Random spread
+                    bossProjectiles.push({
+                        x: boss.x + spread,
+                        z: boss.z, // Start right at the boss position
+                        speed: TUNNEL_SPEED * 1.6 // Much faster projectiles (2x original speed)
                     });
-                    boss.shootTimer = 1;
+                    boss.shootTimer = 0.4; // Shoot twice as fast
                 }
             }
+
+            // Update boss projectiles (can't be destroyed, must be dodged)
+            bossProjectiles = bossProjectiles.filter(projectile => {
+                projectile.z -= projectile.speed * dt;
+
+                // Check collision with player
+                if (projectile.z <= 120 && projectile.z >= 80 && Math.abs(projectile.x - player.x) < 0.25) {
+                    // Player gets hit by boss projectile
+                    player.level = Math.max(0, player.level - 1);
+                    player.hitFlash = 0.5;
+
+                    if (player.level <= 0) {
+                        gameRunning = false;
+                        // Keep music playing even on game over
+                        setTimeout(() => {
+                            location.reload();
+                        }, 100);
+                    }
+                    return false;
+                }
+
+                return projectile.z > -200;
+            });
 
             // Spawn enemies - halved spawn rate, extended range
             if (!boss) {
@@ -1249,19 +1331,17 @@
                 gunSpawnTimer = 60;
             }
 
-            // Spawn gates
-            if (!boss) {
-                gateSpawnTimer -= dt;
-                if (gateSpawnTimer <= 0) {
-                    const problems = generateArithmeticGate();
-                    gates.push({
-                        z: 1800,
-                        passed: false,
-                        leftProblem: problems[0],
-                        rightProblem: problems[1]
-                    });
-                    gateSpawnTimer = 4;
-                }
+            // Spawn gates (continue even with boss to allow ammo refill)
+            gateSpawnTimer -= dt;
+            if (gateSpawnTimer <= 0) {
+                const problems = generateArithmeticGate();
+                gates.push({
+                    z: 1800,
+                    passed: false,
+                    leftProblem: problems[0],
+                    rightProblem: problems[1]
+                });
+                gateSpawnTimer = 4;
             }
 
             // Update UI animations and congratulations
@@ -1284,6 +1364,32 @@
 
             // Update enemy death effects
             updateEnemyDeathEffects(dt);
+
+            // Update boss death animation
+            if (bossDeathAnimation) {
+                bossDeathAnimation.timer += dt * 1000;
+                const progress = bossDeathAnimation.timer / bossDeathAnimation.duration;
+
+                if (bossDeathAnimation.phase === 'growing') {
+                    // Grow dramatically over first 70% of animation
+                    if (progress < 0.7) {
+                        bossDeathAnimation.scale = 1.0 + (progress / 0.7) * 4.0; // Scale to 5x size
+                    } else {
+                        // Switch to squashing phase
+                        bossDeathAnimation.phase = 'squashing';
+                        bossDeathAnimation.scale = 5.0;
+                    }
+                } else if (bossDeathAnimation.phase === 'squashing') {
+                    // Squash down over remaining 30% of animation
+                    const squashProgress = (progress - 0.7) / 0.3;
+                    bossDeathAnimation.scale = 5.0 - (squashProgress * 5.0); // Scale back down to 0
+                }
+
+                // Remove animation when complete
+                if (progress >= 1.0) {
+                    bossDeathAnimation = null;
+                }
+            }
 
             // Update UI with animations
             const scoreElement = document.getElementById('score');
@@ -1338,9 +1444,13 @@
             }
 
             bullets.forEach(drawBullet);
+            bossProjectiles.forEach(drawBossProjectile); // Draw boss projectiles
 
             // Update and draw enemy death effects
             updateEnemyDeathEffects(dt);
+
+            // Draw boss death animation if active
+            drawBossDeathAnimation();
 
             drawCongratulations();
             drawAmmoDisplays();
@@ -1353,7 +1463,7 @@
 
         function showLevelMultiplier() {
             gameRunning = false;
-            stopMusic(); // Stop music on victory
+            // Keep music playing even on victory
             const finalLevel = player.level;
             const baseScore = player.score;
 
@@ -1430,6 +1540,7 @@
             enemies = [];
             coins = [];
             bullets = [];
+            bossProjectiles = []; // Reset boss projectiles
             gates = [];
             gunPickups = [];
             congratulations = [];
@@ -1437,6 +1548,7 @@
             enemySparks = [];
             enemyDeathSprites = [];
             boss = null;
+            bossDeathAnimation = null; // Reset boss death animation
 
             ammoShake = 0;
             ammoPulse = 0;
