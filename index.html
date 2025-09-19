@@ -1133,7 +1133,9 @@
 
                 // Super forgiving coin pickup - collision area increased by 200%
                 if (coin.z <= 100 && coin.z >= 0 && Math.abs(coin.x - player.x) < 1.05 && coin.landed) {
-                    player.score += 100;
+                    // Apply streak multiplier to coin points
+                    const coinValue = 100 * Math.max(1, player.streak);
+                    player.score += coinValue;
                     scorePulse = 0.8;
                     return false;
                 }
@@ -1286,7 +1288,7 @@
                 return projectile.z > -200;
             });
 
-            // Spawn enemies - halved spawn rate, extended range
+            // Spawn enemies - gentler start, same end game intensity
             if (!boss) {
                 enemySpawnTimer -= dt;
                 if (enemySpawnTimer <= 0) {
@@ -1296,7 +1298,7 @@
                         speed: TUNNEL_SPEED * 1.5,
                         hp: 1
                     });
-                    const spawnRate = 2 + (player.gatesPassed / 100) * 38; // Scale from 2 to 40 per second
+                    const spawnRate = 0.5 + (player.gatesPassed / 100) * 39.5; // Scale from 0.5 to 40 per second
                     enemySpawnTimer = 1 / spawnRate;
                 }
             }
