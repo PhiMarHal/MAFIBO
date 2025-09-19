@@ -241,6 +241,7 @@
         let gameRunning = false;
         let gameTime = 0;
         let tunnelOffset = 0;
+        let backgroundOffset = 0; // Tracks how much the background has risen
 
         // Player
         let player = {
@@ -266,6 +267,14 @@
         let ammoDisplays = [];
         let enemySparks = [];
         let enemyDeathSprites = [];
+
+        // Background image
+        let backgroundImage = new Image();
+        backgroundImage.src = 'assets/background.png';
+        let backgroundLoaded = false;
+        backgroundImage.onload = function () {
+            backgroundLoaded = true;
+        };
 
         // UI Animation states
         let ammoShake = 0;
@@ -315,6 +324,40 @@
         function drawTunnel() {
             ctx.fillStyle = '#0a0a1a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw sky gradient first (behind everything) - lighter, goes to actual horizon
+            const visualHorizonY = canvas.height * 0.5; // 600px
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, visualHorizonY);
+            skyGradient.addColorStop(0, '#CC4745'); // New sky color
+            skyGradient.addColorStop(1, 'rgba(204, 71, 69, 0)'); // Fade to transparent at horizon
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, visualHorizonY);
+
+            // Draw background city (behind tunnel but above sky)
+            if (backgroundLoaded) {
+                const originalWidth = 512;
+                const originalHeight = 512;
+                const scaledWidth = originalWidth * 1.6; // Scale to 160%
+                const scaledHeight = originalHeight * 1.6;
+                const backgroundX = (canvas.width - scaledWidth) / 2; // Center horizontally
+
+                // Use the actual visual horizon line at 50% of screen height (600px)
+                const visualHorizonY = canvas.height * 0.5; // 600px in 1200px canvas
+
+                // Start with image positioned mostly below the horizon, then rise up
+                const initialOffset = scaledHeight - 48; // Start with only bottom 48px visible
+                const currentOffset = initialOffset - (backgroundOffset * 1.6);
+                const backgroundY = visualHorizonY - scaledHeight + currentOffset;
+
+                // Draw the entire image, positioned to rise from below
+                ctx.drawImage(
+                    backgroundImage,
+                    0, 0, // Source: entire image
+                    originalWidth, originalHeight, // Source dimensions
+                    backgroundX, backgroundY, // Destination position (moves up over time)
+                    scaledWidth, scaledHeight // Destination dimensions (scaled)
+                );
+            }
 
             const segments = 40;
             for (let i = segments - 1; i >= 0; i--) {
@@ -383,13 +426,6 @@
                     ctx.setLineDash([]);
                 }
             }
-
-            // Sky gradient
-            const skyGradient = ctx.createLinearGradient(0, 0, 0, HORIZON_Y);
-            skyGradient.addColorStop(0, '#000033');
-            skyGradient.addColorStop(1, 'rgba(0, 0, 51, 0)');
-            ctx.fillStyle = skyGradient;
-            ctx.fillRect(0, 0, canvas.width, HORIZON_Y);
         }
 
         function drawEnemy(enemy) {
@@ -664,7 +700,7 @@
                 ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
                 ctx.lineWidth = 2;
 
-                ctx.font = 'bold 64px Arial';
+                ctx.font = '48px "Press Start 2P", monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
@@ -819,6 +855,9 @@
             tunnelOffset += dt * 5;
             gameTime += dt;
 
+            // Background rises 1 pixel per second (much faster than before)
+            backgroundOffset += dt * 1;
+
             // Keyboard movement
             if (moveLeft) {
                 player.x -= dt * 3;
@@ -901,8 +940,8 @@
 
                     if (player.level <= 0) {
                         gameRunning = false;
+                        // Game over - just reload without the annoying popup
                         setTimeout(() => {
-                            alert(`GAME OVER\nScore: ${player.score}\nGates Passed: ${player.gatesPassed}`);
                             location.reload();
                         }, 100);
                     }
@@ -1253,7 +1292,7 @@
                     } else {
                         setTimeout(() => {
                             document.body.removeChild(levelDisplay);
-                            alert(`VICTORY!\nFinal Score: ${targetScore} (${baseScore} × ${finalLevel})\nLevel: ${finalLevel}`);
+                            // Victory - just reload without popup
                             location.reload();
                         }, 1000);
                     }
@@ -1299,6 +1338,7 @@
             gunSpawnTimer = 60;
             gameTime = 0;
             lastTime = 0;
+            backgroundOffset = 0; // Reset background progression
 
             gameRunning = true;
             requestAnimationFrame(gameLoop);
