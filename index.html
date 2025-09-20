@@ -1257,12 +1257,15 @@
                 });
             }
 
-            // Phase 1: Draw guns that should be behind Remixette
-            for (let gun of gunPositions) {
+            // Phase 1: Draw guns that should be behind Remixette (sorted by distance from center)
+            let backGuns = gunPositions.filter(gun => {
                 const shouldBeInFront = player.flipped ? !gun.isOnLeftSide : gun.isOnLeftSide;
-                if (!shouldBeInFront) {
-                    drawGun(gun.index, gun.x, gun.y);
-                }
+                return !shouldBeInFront;
+            });
+            // Sort back guns: furthest from center drawn first (back to front)
+            backGuns.sort((a, b) => Math.abs(b.x - x) - Math.abs(a.x - x));
+            for (let gun of backGuns) {
+                drawGun(gun.index, gun.x, gun.y);
             }
 
             // Phase 2: Draw Remixette
@@ -1290,12 +1293,15 @@
             ctx.textAlign = 'center';
             ctx.fillText(`LVL ${player.level} ${getRank(player.level)}`, x, y - 130);
 
-            // Phase 3: Draw guns that should be in front of Remixette
-            for (let gun of gunPositions) {
+            // Phase 3: Draw guns that should be in front of Remixette (sorted by distance from center)
+            let frontGuns = gunPositions.filter(gun => {
                 const shouldBeInFront = player.flipped ? !gun.isOnLeftSide : gun.isOnLeftSide;
-                if (shouldBeInFront) {
-                    drawGun(gun.index, gun.x, gun.y);
-                }
+                return shouldBeInFront;
+            });
+            // Sort front guns: furthest from center drawn first (back to front)
+            frontGuns.sort((a, b) => Math.abs(b.x - x) - Math.abs(a.x - x));
+            for (let gun of frontGuns) {
+                drawGun(gun.index, gun.x, gun.y);
             }
         }
 
@@ -1416,12 +1422,11 @@
                             scaleY: 1.0,
                             timer: 0,
                             growthDuration: 1000, // 1 second for growth
-                            squashDuration: 4000, // 4 seconds for dramatic squashing
-                            totalDuration: 5000,
+                            squashDuration: 4000, // 4 seconds for squashing
+                            totalDuration: 5000, // Total 5 seconds
                             scoreCalculated: false
                         };
                         boss = null;
-                        // Start score calculation immediately when squashing begins
                     }
                     return false;
                 }
@@ -1765,7 +1770,6 @@
 
             if (bossDeathAnimation) {
                 bossDeathAnimation.timer += dt * 1000;
-                const progress = bossDeathAnimation.timer / bossDeathAnimation.totalDuration;
 
                 if (bossDeathAnimation.phase === 'growing') {
                     if (bossDeathAnimation.timer < bossDeathAnimation.growthDuration) {
@@ -1792,10 +1796,12 @@
                     bossDeathAnimation.scaleY = 5.0 * Math.max(0.01, 1 - squashProgress * 0.99); // Gets extremely flat
                 }
 
-                if (progress >= 1.0) {
+                const totalProgress = bossDeathAnimation.timer / bossDeathAnimation.totalDuration;
+                if (totalProgress >= 1.0) {
                     bossDeathAnimation = null;
                 }
             }
+
             const scoreElement = document.getElementById('score');
             const ammoElement = document.getElementById('ammo');
 
