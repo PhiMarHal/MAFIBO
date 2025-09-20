@@ -315,13 +315,19 @@
         remixBossSprite.src = BASE_URL + 'assets/remixboss.png';
         let remixBoySprite = new Image();
         remixBoySprite.src = BASE_URL + 'assets/remixboy.png';
+        let gunHeldSprite = new Image();
+        gunHeldSprite.src = BASE_URL + 'assets/gun_held.png';
+        let gunPickupSprite = new Image();
+        gunPickupSprite.src = BASE_URL + 'assets/gun_pickup.png';
 
         let spritesLoaded = {
             remixetteBack: false,
             remixetteFront: false,
             remixBot: false,
             remixBoss: false,
-            remixBoy: false
+            remixBoy: false,
+            gunHeld: false,
+            gunPickup: false
         };
 
         remixetteBackSprite.onload = () => spritesLoaded.remixetteBack = true;
@@ -338,6 +344,8 @@
             spritesLoaded.remixBoy = true;
             drawIntroScene();
         };
+        gunHeldSprite.onload = () => spritesLoaded.gunHeld = true;
+        gunPickupSprite.onload = () => spritesLoaded.gunPickup = true;
 
         function drawIntroScene() {
             const introCanvas = document.getElementById('introCanvas');
@@ -701,25 +709,38 @@
         function drawGunPickup(gunPickup) {
             const pos = project3D(gunPickup.x, 0, gunPickup.z);
             if (pos.scale > 0.05 && gunPickup.z > 0 && gunPickup.z < 2000) {
-                const size = 50 * pos.scale;
                 const tunnelFloorY = pos.y;
                 const screenY = Math.min(gunPickup.dropY, tunnelFloorY);
+
+                // Use sprite dimensions: 256x192
+                const baseWidth = 256;
+                const baseHeight = 192;
+                const scale = pos.scale * 0.5; // Adjust this multiplier to get the right size
+                const spriteWidth = baseWidth * scale;
+                const spriteHeight = baseHeight * scale;
 
                 ctx.save();
                 ctx.translate(pos.x, screenY);
                 ctx.rotate(gunPickup.rotation);
 
-                ctx.fillStyle = '#444444';
-                ctx.fillRect(-size * 1.2, -size * 0.3, size * 2.4, size * 0.6);
-
-                ctx.fillStyle = '#666666';
-                ctx.fillRect(size * 0.8, -size * 0.2, size * 0.8, size * 0.4);
-
-                ctx.fillStyle = '#333333';
-                ctx.fillRect(-size * 0.4, -size * 0.3, size * 0.8, size * 1.2);
-
-                ctx.fillStyle = '#888888';
-                ctx.fillRect(-size * 1.1, -size * 0.2, size * 2.2, size * 0.2);
+                if (spritesLoaded.gunPickup) {
+                    ctx.drawImage(
+                        gunPickupSprite,
+                        -spriteWidth / 2, -spriteHeight / 2,
+                        spriteWidth, spriteHeight
+                    );
+                } else {
+                    // Fallback to old programmatic rendering if sprite not loaded
+                    const size = 50 * pos.scale;
+                    ctx.fillStyle = '#444444';
+                    ctx.fillRect(-size * 1.2, -size * 0.3, size * 2.4, size * 0.6);
+                    ctx.fillStyle = '#666666';
+                    ctx.fillRect(size * 0.8, -size * 0.2, size * 0.8, size * 0.4);
+                    ctx.fillStyle = '#333333';
+                    ctx.fillRect(-size * 0.4, -size * 0.3, size * 0.8, size * 1.2);
+                    ctx.fillStyle = '#888888';
+                    ctx.fillRect(-size * 1.1, -size * 0.2, size * 2.2, size * 0.2);
+                }
 
                 ctx.restore();
             }
@@ -1176,6 +1197,75 @@
 
             const size = 96;
 
+            // Helper function to draw a single gun
+            function drawGun(gunIndex, gunX, gunY) {
+                if (spritesLoaded.gunHeld && gunHeldSprite.complete) {
+                    const gunSpriteSize = 80;
+
+                    ctx.save();
+                    ctx.translate(gunX, gunY);
+
+                    if (player.flipped) {
+                        ctx.scale(-1, 1);
+                    }
+
+                    ctx.drawImage(
+                        gunHeldSprite,
+                        -gunSpriteSize / 2, -gunSpriteSize / 2,
+                        gunSpriteSize, gunSpriteSize
+                    );
+
+                    ctx.restore();
+                } else {
+                    // Fallback - bright yellow for debugging
+                    ctx.fillStyle = '#ffff00';
+                    ctx.fillRect(gunX - 6, gunY - 30, 12, 60);
+                }
+            }
+
+            // Calculate gun positions first
+            let gunPositions = [];
+            for (let i = 0; i < player.guns; i++) {
+                let gunX;
+
+                if (i === 0) {
+                    // First gun: left hand position
+                    gunX = x - 45;
+                } else if (i === 1) {
+                    // Second gun: right hand position  
+                    gunX = x + 45;
+                } else {
+                    // Additional guns stack outward alternating left/right
+                    const extraGuns = i - 2;
+                    const stackSide = extraGuns % 2;
+                    const stackLevel = Math.floor(extraGuns / 2) + 1;
+
+                    if (stackSide === 0) {
+                        // Stack on left side
+                        gunX = x - 45 - (stackLevel * 30);
+                    } else {
+                        // Stack on right side
+                        gunX = x + 45 + (stackLevel * 30);
+                    }
+                }
+
+                gunPositions.push({
+                    index: i,
+                    x: gunX,
+                    y: y - 50,
+                    isOnLeftSide: gunX < x
+                });
+            }
+
+            // Phase 1: Draw guns that should be behind Remixette
+            for (let gun of gunPositions) {
+                const shouldBeInFront = player.flipped ? !gun.isOnLeftSide : gun.isOnLeftSide;
+                if (!shouldBeInFront) {
+                    drawGun(gun.index, gun.x, gun.y);
+                }
+            }
+
+            // Phase 2: Draw Remixette
             ctx.save();
             ctx.translate(x, y - size / 2);
 
@@ -1194,15 +1284,18 @@
 
             ctx.restore();
 
+            // Draw level text
             ctx.fillStyle = 'white';
             ctx.font = '20px "Press Start 2P", monospace';
             ctx.textAlign = 'center';
             ctx.fillText(`LVL ${player.level} ${getRank(player.level)}`, x, y - 130);
 
-            ctx.fillStyle = '#444';
-            for (let i = 0; i < player.guns; i++) {
-                const gunX = x + (i - (player.guns - 1) / 2) * 30;
-                ctx.fillRect(gunX - 4, y - 50, 8, 40);
+            // Phase 3: Draw guns that should be in front of Remixette
+            for (let gun of gunPositions) {
+                const shouldBeInFront = player.flipped ? !gun.isOnLeftSide : gun.isOnLeftSide;
+                if (shouldBeInFront) {
+                    drawGun(gun.index, gun.x, gun.y);
+                }
             }
         }
 
