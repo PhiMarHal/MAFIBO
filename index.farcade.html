@@ -1693,7 +1693,7 @@
             // Handle mute/unmute requests from Farcade
             window.FarcadeSDK.on('toggle_mute', (data) => {
                 console.log('Farcade SDK: Mute toggle requested, isMuted:', data.isMuted);
-                
+
                 if (data.isMuted) {
                     // Mute the music
                     if (currentTrack) {
@@ -1711,7 +1711,7 @@
                         nextTrack.volume = 0.7;
                     }
                 }
-                
+
                 console.log('Farcade SDK: Music mute state set to:', data.isMuted);
             });
 
