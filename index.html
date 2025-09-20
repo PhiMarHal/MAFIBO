@@ -652,38 +652,23 @@
         function drawEnemy(enemy) {
             const pos = project3D(enemy.x, 0, enemy.z);
             if (pos.scale > 0.05 && enemy.z > 0 && enemy.z < 2000) {
-                if (spritesLoaded.remixBot) {
-                    const size = 112 * pos.scale;
+                const size = 112 * pos.scale;
 
-                    ctx.save();
-                    ctx.translate(pos.x, pos.y - size / 2 + enemy.bobOffset); // Apply bobbing
+                ctx.save();
+                ctx.translate(pos.x, pos.y - size / 2 + enemy.bobOffset);
 
-                    // Apply horizontal flip
-                    if (enemy.flipped) {
-                        ctx.scale(-1, 1);
-                    }
-
-                    // Apply angle
-                    ctx.rotate(enemy.angle * Math.PI / 180);
-
-                    ctx.drawImage(
-                        remixBotSprite,
-                        -size / 2, -size / 2,
-                        size, size
-                    );
-                    ctx.restore();
-                } else {
-                    // Fallback
-                    const size = 112 * pos.scale;
-                    const yPos = pos.y + enemy.bobOffset; // Apply bobbing to fallback too
-                    ctx.fillStyle = '#ff4444';
-                    ctx.fillRect(pos.x - size / 2, yPos - size, size, size);
-                    ctx.fillStyle = '#cc2222';
-                    ctx.fillRect(pos.x - size / 3, yPos - size * 1.3, size * 0.66, size * 0.3);
-                    ctx.fillStyle = '#ffff00';
-                    ctx.fillRect(pos.x - size / 3, yPos - size * 0.8, size / 6, size / 6);
-                    ctx.fillRect(pos.x + size / 6, yPos - size * 0.8, size / 6, size / 6);
+                if (enemy.flipped) {
+                    ctx.scale(-1, 1);
                 }
+
+                ctx.rotate(enemy.angle * Math.PI / 180);
+
+                ctx.drawImage(
+                    remixBotSprite,
+                    -size / 2, -size / 2,
+                    size, size
+                );
+                ctx.restore();
             }
         }
 
@@ -900,25 +885,13 @@
 
             const pos = project3D(boss.x, -100, boss.z);
             if (pos.scale > 0.05 && boss.z > 0 && boss.z < 2000) {
-                if (spritesLoaded.remixBoss) {
-                    const size = 240 * pos.scale;
-                    ctx.drawImage(
-                        remixBossSprite,
-                        pos.x - size / 2, pos.y - size,
-                        size, size
-                    );
-                } else {
-                    const size = 240 * pos.scale;
-                    ctx.fillStyle = '#8B0000';
-                    ctx.fillRect(pos.x - size / 2, pos.y - size, size, size);
-                    ctx.fillStyle = '#ff0000';
-                    ctx.fillRect(pos.x - size / 2.5, pos.y - size * 0.9, size * 0.8, size * 0.7);
-                    ctx.fillStyle = '#ffff00';
-                    ctx.fillRect(pos.x - size / 3, pos.y - size * 0.7, size / 4, size / 4);
-                    ctx.fillRect(pos.x + size / 12, pos.y - size * 0.7, size / 4, size / 4);
-                }
-
                 const size = 240 * pos.scale;
+                ctx.drawImage(
+                    remixBossSprite,
+                    pos.x - size / 2, pos.y - size,
+                    size, size
+                );
+
                 const barWidth = size * 1.5;
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                 ctx.fillRect(pos.x - barWidth / 2, pos.y - size - 60, barWidth, 20);
@@ -937,25 +910,13 @@
 
             const pos = project3D(bossDeathAnimation.x, -100, bossDeathAnimation.z);
             if (pos.scale > 0.05) {
-                if (spritesLoaded.remixBoss) {
-                    const baseSize = 240 * pos.scale;
-                    const size = baseSize * bossDeathAnimation.scale;
-                    ctx.drawImage(
-                        remixBossSprite,
-                        pos.x - size / 2, pos.y - size,
-                        size, size
-                    );
-                } else {
-                    const baseSize = 240 * pos.scale;
-                    const size = baseSize * bossDeathAnimation.scale;
-                    ctx.fillStyle = '#8B0000';
-                    ctx.fillRect(pos.x - size / 2, pos.y - size, size, size);
-                    ctx.fillStyle = '#ff0000';
-                    ctx.fillRect(pos.x - size / 2.5, pos.y - size * 0.9, size * 0.8, size * 0.7);
-                    ctx.fillStyle = '#ffff00';
-                    ctx.fillRect(pos.x - size / 3, pos.y - size * 0.7, size / 4, size / 4);
-                    ctx.fillRect(pos.x + size / 12, pos.y - size * 0.7, size / 4, size / 4);
-                }
+                const baseSize = 240 * pos.scale;
+                const size = baseSize * bossDeathAnimation.scale;
+                ctx.drawImage(
+                    remixBossSprite,
+                    pos.x - size / 2, pos.y - size,
+                    size, size
+                );
             }
         }
 
@@ -1032,6 +993,7 @@
                 y: pos.y,
                 size: Math.max(20, 112 * pos.scale),
                 rotation: 0,
+                rotationDirection: Math.random() < 0.5 ? 1 : -1, // Random left or right fall
                 alpha: 1,
                 timer: 0,
                 maxLife: 600
@@ -1065,7 +1027,7 @@
                 sprite.timer += dt * 1000;
                 if (sprite.timer > sprite.maxLife) return false;
 
-                sprite.rotation = (sprite.timer / sprite.maxLife) * Math.PI / 2;
+                sprite.rotation = (sprite.timer / sprite.maxLife) * Math.PI / 2 * sprite.rotationDirection;
                 sprite.alpha = Math.max(0, 1 - (sprite.timer / sprite.maxLife));
 
                 ctx.save();
@@ -1073,21 +1035,11 @@
                 ctx.translate(sprite.x, sprite.y);
                 ctx.rotate(sprite.rotation);
 
-                if (spritesLoaded.remixBot) {
-                    ctx.drawImage(
-                        remixBotSprite,
-                        -sprite.size / 2, -sprite.size / 2,
-                        sprite.size, sprite.size
-                    );
-                } else {
-                    ctx.fillStyle = '#ff6666';
-                    ctx.fillRect(-sprite.size / 2, -sprite.size / 2, sprite.size, sprite.size);
-                    ctx.fillStyle = '#dd4444';
-                    ctx.fillRect(-sprite.size / 3, -sprite.size * 0.65, sprite.size * 0.66, sprite.size * 0.3);
-                    ctx.fillStyle = '#ffff44';
-                    ctx.fillRect(-sprite.size / 3, -sprite.size * 0.4, sprite.size / 6, sprite.size / 6);
-                    ctx.fillRect(sprite.size / 6, -sprite.size * 0.4, sprite.size / 6, sprite.size / 6);
-                }
+                ctx.drawImage(
+                    remixBotSprite,
+                    -sprite.size / 2, -sprite.size / 2,
+                    sprite.size, sprite.size
+                );
 
                 ctx.restore();
 
@@ -1101,47 +1053,32 @@
             const y = PLAYER_Y + player.bobOffset;
 
             const isFlashing = player.hitFlash > 0;
+            const size = 96;
 
-            if (spritesLoaded.remixetteBack) {
-                const size = 96;
+            ctx.save();
+            ctx.translate(x, y - size / 2);
 
-                ctx.save();
-                ctx.translate(x, y - size / 2);
-
-                if (player.flipped) {
-                    ctx.scale(-1, 1);
-                    ctx.rotate(-player.angle * Math.PI / 180);
-                } else {
-                    ctx.rotate(player.angle * Math.PI / 180);
-                }
-
-                if (isFlashing) {
-                    ctx.globalCompositeOperation = 'multiply';
-                    ctx.fillStyle = '#ff0000';
-                    ctx.fillRect(-size / 2, -size / 2, size, size);
-                    ctx.globalCompositeOperation = 'source-over';
-                }
-
-                ctx.drawImage(
-                    remixetteBackSprite,
-                    -size / 2, -size / 2,
-                    size, size
-                );
-
-                ctx.restore();
+            if (player.flipped) {
+                ctx.scale(-1, 1);
+                ctx.rotate(-player.angle * Math.PI / 180);
             } else {
-                ctx.fillStyle = isFlashing ? '#ff0000' : '#ff69b4';
-                ctx.fillRect(x - 48, y - 72, 96, 72);
-
-                ctx.fillStyle = isFlashing ? '#ff0000' : '#fdbcb4';
-                ctx.beginPath();
-                ctx.arc(x, y - 108, 36, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.fillStyle = '#000';
-                ctx.fillRect(x - 19, y - 113, 10, 10);
-                ctx.fillRect(x + 10, y - 113, 10, 10);
+                ctx.rotate(player.angle * Math.PI / 180);
             }
+
+            if (isFlashing) {
+                ctx.globalCompositeOperation = 'multiply';
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(-size / 2, -size / 2, size, size);
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            ctx.drawImage(
+                remixetteBackSprite,
+                -size / 2, -size / 2,
+                size, size
+            );
+
+            ctx.restore();
 
             ctx.fillStyle = 'white';
             ctx.font = '20px "Press Start 2P", monospace';
@@ -1304,7 +1241,7 @@
                 }
 
                 // Ponderous bobbing - twice slower and twice the amplitude
-                enemy.bobOffset = Math.sin(enemy.bobTimer * 10) * 6;
+                enemy.bobOffset = Math.sin(enemy.bobTimer * 10) * 10;
 
                 if (enemy.z <= 120 && enemy.z >= 80 && Math.abs(enemy.x - player.x) < 0.25) {
                     player.level = Math.max(0, player.level - 1);
