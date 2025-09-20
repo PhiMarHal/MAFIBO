@@ -1094,6 +1094,36 @@
             enemyDeathSprites.push(deathSprite);
         }
 
+        function createBossHitSparks(x, y, scale) {
+            const numSparks = Math.max(4, Math.floor(8 * scale)); // Scale number of sparks
+            const sparkSpeed = 800 * scale; // Scale speed
+
+            for (let i = 0; i < numSparks; i++) {
+                const angle = (Math.PI * 2 * i) / numSparks + Math.random() * 0.6 - 0.3;
+                const speed = sparkSpeed + Math.random() * (400 * scale);
+
+                const spark = {
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    width: Math.max(8, 20 * scale) + Math.random() * (20 * scale),
+                    height: Math.max(3, 6 * scale),
+                    alpha: 1,
+                    timer: 0,
+                    movementTime: 120 + Math.random() * 80,
+                    fadeTime: 150,
+                    totalLife: 0,
+                    isMoving: true,
+                    rotation: angle
+                };
+
+                spark.totalLife = spark.movementTime + spark.fadeTime;
+                playerHitSparks.push(spark); // Reuse the same array and drawing function
+            }
+        }
+
+
         function updateEnemyDeathEffects(dt) {
             enemySparks = enemySparks.filter(spark => {
                 spark.timer += dt * 1000;
@@ -1277,6 +1307,13 @@
 
                 if (boss && Math.abs(bullet.x - boss.x) < 0.3 && Math.abs(bullet.z - boss.z) < 150) {
                     boss.hp -= player.damage;
+
+                    // Add boss hit sparks when hit
+                    const bossPos = project3D(boss.x, -100, boss.z);
+                    if (bossPos.scale > 0.05) {
+                        createBossHitSparks(bossPos.x, bossPos.y - (240 * bossPos.scale) / 2, bossPos.scale);
+                    }
+
                     if (boss.hp <= 0) {
                         bossDeathAnimation = {
                             x: boss.x,
@@ -1285,11 +1322,13 @@
                             scaleX: 1.0,
                             scaleY: 1.0,
                             timer: 0,
-                            duration: 3000, // Slightly longer for dramatic effect
+                            growthDuration: 1000, // 1 second for growth
+                            squashDuration: 4000, // 4 seconds for dramatic squashing
+                            totalDuration: 5000,
                             scoreCalculated: false
                         };
                         boss = null;
-                        // Remove the setTimeout - score calculation will happen during squashing
+                        // Start score calculation immediately when squashing begins
                     }
                     return false;
                 }
@@ -1633,37 +1672,37 @@
 
             if (bossDeathAnimation) {
                 bossDeathAnimation.timer += dt * 1000;
-                const progress = bossDeathAnimation.timer / bossDeathAnimation.duration;
+                const progress = bossDeathAnimation.timer / bossDeathAnimation.totalDuration;
 
                 if (bossDeathAnimation.phase === 'growing') {
-                    if (progress < 0.4) { // Growth phase is 40% of animation
-                        const growthProgress = progress / 0.4;
+                    if (bossDeathAnimation.timer < bossDeathAnimation.growthDuration) {
+                        const growthProgress = bossDeathAnimation.timer / bossDeathAnimation.growthDuration;
                         bossDeathAnimation.scaleX = 1.0 + (growthProgress * 4.0);
                         bossDeathAnimation.scaleY = 1.0 + (growthProgress * 4.0);
                     } else {
+                        // Start squashing phase and score calculation
                         bossDeathAnimation.phase = 'squashing';
                         bossDeathAnimation.scaleX = 5.0;
                         bossDeathAnimation.scaleY = 5.0;
+
+                        if (!bossDeathAnimation.scoreCalculated) {
+                            bossDeathAnimation.scoreCalculated = true;
+                            showLevelMultiplier(); // Start score count NOW
+                        }
                     }
                 } else if (bossDeathAnimation.phase === 'squashing') {
-                    const squashProgress = (progress - 0.4) / 0.6; // Squash phase is 60% of animation
+                    const squashTime = bossDeathAnimation.timer - bossDeathAnimation.growthDuration;
+                    const squashProgress = squashTime / bossDeathAnimation.squashDuration;
 
-                    // Pancake effect: X gets wider, Y gets much smaller
-                    bossDeathAnimation.scaleX = 5.0 + (squashProgress * 3.0); // Gets wider
-                    bossDeathAnimation.scaleY = 5.0 * (1 - squashProgress * 0.95); // Gets very flat
-
-                    // Trigger score calculation early in squashing phase
-                    if (!bossDeathAnimation.scoreCalculated && squashProgress > 0.2) {
-                        bossDeathAnimation.scoreCalculated = true;
-                        showLevelMultiplier();
-                    }
+                    // Much more dramatic pancaking effect over 4 seconds
+                    bossDeathAnimation.scaleX = 5.0 + (squashProgress * 8.0); // Gets much wider
+                    bossDeathAnimation.scaleY = 5.0 * Math.max(0.01, 1 - squashProgress * 0.99); // Gets extremely flat
                 }
 
                 if (progress >= 1.0) {
                     bossDeathAnimation = null;
                 }
             }
-
             const scoreElement = document.getElementById('score');
             const ammoElement = document.getElementById('ammo');
 
@@ -1739,17 +1778,17 @@
             const levelDisplay = document.createElement('div');
             levelDisplay.textContent = `LVL ${finalLevel}`;
             levelDisplay.style.cssText = `
-                position: fixed;
-                left: 50%;
-                top: 50%;
-                transform: translateX(-50%) translateY(-50%);
-                font-family: 'Press Start 2P', monospace;
-                font-size: 64px;
-                color: #ffff00;
-                text-shadow: 3px 3px 0 #000;
-                z-index: 2000;
-                pointer-events: none;
-            `;
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translateX(-50%) translateY(-50%);
+        font-family: 'Press Start 2P', monospace;
+        font-size: 64px;
+        color: #ffff00;
+        text-shadow: 3px 3px 0 #000;
+        z-index: 2000;
+        pointer-events: none;
+    `;
             document.body.appendChild(levelDisplay);
 
             setTimeout(() => {
@@ -1758,10 +1797,11 @@
                 levelDisplay.style.fontSize = '48px';
             }, 500);
 
+            // Start score animation after 2 seconds, lasting 3 seconds (synced with squashing)
             setTimeout(() => {
                 let currentScore = baseScore;
                 const targetScore = baseScore * finalLevel;
-                const duration = 2000;
+                const duration = 3000; // 3 seconds to match squashing duration
                 const startTime = Date.now();
 
                 const animateScore = () => {
@@ -1776,6 +1816,7 @@
                     if (progress < 1) {
                         requestAnimationFrame(animateScore);
                     } else {
+                        // Wait a bit longer to let the pancaking finish
                         setTimeout(() => {
                             document.body.removeChild(levelDisplay);
                             if (window.FarcadeSDK) {
@@ -1791,7 +1832,6 @@
                 animateScore();
             }, 2000);
         }
-
         function startGame() {
             document.getElementById('introScreen').style.display = 'none';
 

@@ -44,12 +44,24 @@
             z-index: 1000;
         }
 
+        #introCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1001;
+        }
+
         #introScreen h1 {
             font-size: 96px;
             color: white;
             text-shadow: 6px 6px 0 #000;
-            margin-bottom: 100px;
+            margin-bottom: 50px;
+            margin-top: -150px;
             animation: pulse 2s infinite;
+            z-index: 1002;
+            position: relative;
         }
 
         @keyframes pulse {
@@ -74,6 +86,9 @@
             cursor: pointer;
             box-shadow: 0 10px 0 #c44444;
             transition: all 0.1s;
+            z-index: 1002;
+            position: relative;
+            margin-top: 150px;
         }
 
         #playButton:hover {
@@ -208,6 +223,7 @@
 <body>
     <div id="gameContainer">
         <div id="introScreen">
+            <canvas id="introCanvas"></canvas>
             <h1>MAFIBO</h1>
             <button id="playButton">PLAY</button>
         </div>
@@ -225,7 +241,6 @@
         // Base URL for all assets
         const BASE_URL = "https://mafibo.loiyaa.com/";
 
-        // Set fixed resolution with scaling
         function resizeCanvas() {
             canvas.width = 800;
             canvas.height = 1200;
@@ -234,7 +249,7 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // Constants for perspective - scaled 2x from original 400x600
+        // Constants for perspective
         const HORIZON_Y = 400;
         const HORIZON_X = 400;
         const PLAYER_Y = canvas.height - 80;
@@ -245,7 +260,7 @@
         let gameRunning = false;
         let gameTime = 0;
         let tunnelOffset = 0;
-        let backgroundOffset = 0; // Tracks how much the background has risen
+        let backgroundOffset = 0;
 
         // Player
         let player = {
@@ -256,23 +271,31 @@
             gatesPassed: 0,
             guns: 1,
             damage: 1,
-            hitFlash: 0, // Tracks hit flash timer
-            streak: 0
+            hitFlash: 0,
+            streak: 0,
+            angleTimer: 0,
+            angle: 0,
+            angleDirection: 1,
+            flipped: false,
+            movingRight: false,
+            bobTimer: 0,
+            bobOffset: 0
         };
 
         // Entities
         let enemies = [];
         let coins = [];
         let bullets = [];
-        let bossProjectiles = []; // New: boss projectiles that can't be destroyed
+        let bossProjectiles = [];
         let gates = [];
         let gunPickups = [];
         let boss = null;
-        let bossDeathAnimation = null; // New: boss death animation state
+        let bossDeathAnimation = null;
         let congratulations = [];
         let ammoDisplays = [];
         let enemySparks = [];
         let enemyDeathSprites = [];
+        let playerHitSparks = []; // New: player hit impact sparks
 
         // Background image
         let backgroundImage = new Image();
@@ -282,6 +305,96 @@
             backgroundLoaded = true;
         };
 
+        // Sprite images
+        let remixetteBackSprite = new Image();
+        remixetteBackSprite.src = BASE_URL + 'assets/remixette_back.png';
+        let remixetteFrontSprite = new Image();
+        remixetteFrontSprite.src = BASE_URL + 'assets/remixette_front.png';
+        let remixBotSprite = new Image();
+        remixBotSprite.src = BASE_URL + 'assets/remix_bot.png';
+        let remixBossSprite = new Image();
+        remixBossSprite.src = BASE_URL + 'assets/remixboss.png';
+        let remixBoySprite = new Image();
+        remixBoySprite.src = BASE_URL + 'assets/remixboy.png';
+
+        let spritesLoaded = {
+            remixetteBack: false,
+            remixetteFront: false,
+            remixBot: false,
+            remixBoss: false,
+            remixBoy: false
+        };
+
+        remixetteBackSprite.onload = () => spritesLoaded.remixetteBack = true;
+        remixetteFrontSprite.onload = () => {
+            spritesLoaded.remixetteFront = true;
+            drawIntroScene();
+        };
+        remixBotSprite.onload = () => spritesLoaded.remixBot = true;
+        remixBossSprite.onload = () => {
+            spritesLoaded.remixBoss = true;
+            drawIntroScene();
+        };
+        remixBoySprite.onload = () => {
+            spritesLoaded.remixBoy = true;
+            drawIntroScene();
+        };
+
+        function drawIntroScene() {
+            const introCanvas = document.getElementById('introCanvas');
+            if (!introCanvas) return;
+
+            const introCtx = introCanvas.getContext('2d');
+            const container = document.getElementById('gameContainer');
+            introCanvas.width = container.offsetWidth;
+            introCanvas.height = container.offsetHeight;
+
+            introCtx.clearRect(0, 0, introCanvas.width, introCanvas.height);
+
+            if (spritesLoaded.remixetteFront && spritesLoaded.remixBoy && spritesLoaded.remixBoss) {
+                const spriteSize = 120;
+                const canvasWidth = introCanvas.width;
+                const canvasHeight = introCanvas.height;
+
+                // Draw Remixette on the left
+                const remixetteX = canvasWidth * 0.2;
+                const remixetteY = canvasHeight * 0.6;
+                introCtx.drawImage(
+                    remixetteFrontSprite,
+                    remixetteX - spriteSize / 2,
+                    remixetteY - spriteSize,
+                    spriteSize, spriteSize
+                );
+
+                // Draw RemixBoy lying down
+                const remixBoyX = canvasWidth * 0.65;
+                const remixBoyY = canvasHeight * 0.7;
+                introCtx.save();
+                introCtx.translate(remixBoyX, remixBoyY);
+                introCtx.rotate(Math.PI / 2);
+                introCtx.drawImage(
+                    remixBoySprite,
+                    -spriteSize / 2, -spriteSize / 2,
+                    spriteSize, spriteSize
+                );
+                introCtx.restore();
+
+                // Draw RemixBoss flipped and scaled
+                const bossSize = spriteSize * 1.2;
+                const bossX = canvasWidth * 0.75;
+                const bossY = canvasHeight * 0.6;
+                introCtx.save();
+                introCtx.translate(bossX, bossY);
+                introCtx.scale(-1, 1);
+                introCtx.drawImage(
+                    remixBossSprite,
+                    -bossSize / 2, -bossSize,
+                    bossSize, bossSize
+                );
+                introCtx.restore();
+            }
+        }
+
         // Music system
         let currentTrack = null;
         let nextTrack = null;
@@ -289,7 +402,7 @@
         let musicPaused = false;
         let nextTrackTimer = null;
         let pauseTimer = null;
-        const trackCount = 6; // Updated for track_06
+        const trackCount = 6;
         let musicEnabled = false;
 
         function shuffleTracks() {
@@ -297,7 +410,6 @@
             for (let i = 1; i <= trackCount; i++) {
                 trackQueue.push(i);
             }
-            // Fisher-Yates shuffle
             for (let i = trackQueue.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [trackQueue[i], trackQueue[j]] = [trackQueue[j], trackQueue[i]];
@@ -316,17 +428,15 @@
             if (!musicEnabled || !gameRunning) return;
 
             if (trackQueue.length === 0) {
-                shuffleTracks(); // Reshuffle when we've played all tracks
+                shuffleTracks();
             }
 
             const nextTrackNum = trackQueue.shift();
 
             if (nextTrack && nextTrack.trackNumber === nextTrackNum) {
-                // Next track is already loaded
                 currentTrack = nextTrack;
                 nextTrack = null;
             } else {
-                // Load the track now
                 currentTrack = loadTrack(nextTrackNum);
             }
 
@@ -334,7 +444,6 @@
 
             currentTrack.onended = () => {
                 if (!musicEnabled || !gameRunning) return;
-                // 2 second pause before next track
                 pauseTimer = setTimeout(() => {
                     playNextTrack();
                 }, 2000);
@@ -349,7 +458,6 @@
                 console.warn(`Failed to play track ${nextTrackNum}:`, e);
             });
 
-            // Start loading next track after 1 minute
             nextTrackTimer = setTimeout(() => {
                 if (trackQueue.length === 0) {
                     shuffleTracks();
@@ -420,7 +528,6 @@
             return 'BOSS SLAYER';
         }
 
-        // Project 3D coordinates to 2D screen
         function project3D(x, y, z) {
             const fov = 600;
             const scale = fov / (fov + z);
@@ -439,37 +546,33 @@
             ctx.fillStyle = '#0a0a1a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw sky gradient first (behind everything) - lighter, goes to actual horizon
-            const visualHorizonY = canvas.height * 0.5; // 600px
+            // Draw sky gradient first
+            const visualHorizonY = canvas.height * 0.5;
             const skyGradient = ctx.createLinearGradient(0, 0, 0, visualHorizonY);
-            skyGradient.addColorStop(0, '#CC4745'); // New sky color
-            skyGradient.addColorStop(1, 'rgba(204, 71, 69, 0)'); // Fade to transparent at horizon
+            skyGradient.addColorStop(0, '#CC4745');
+            skyGradient.addColorStop(1, 'rgba(204, 71, 69, 0)');
             ctx.fillStyle = skyGradient;
             ctx.fillRect(0, 0, canvas.width, visualHorizonY);
 
-            // Draw background city (behind tunnel but above sky)
+            // Draw background city
             if (backgroundLoaded) {
                 const originalWidth = 512;
                 const originalHeight = 512;
-                const scaledWidth = originalWidth * 1.6; // Scale to 160%
+                const scaledWidth = originalWidth * 1.6;
                 const scaledHeight = originalHeight * 1.6;
-                const backgroundX = (canvas.width - scaledWidth) / 2; // Center horizontally
+                const backgroundX = (canvas.width - scaledWidth) / 2;
 
-                // Use the actual visual horizon line at 50% of screen height (600px)
-                const visualHorizonY = canvas.height * 0.5; // 600px in 1200px canvas
-
-                // Start with image positioned mostly below the horizon, then rise up
-                const initialOffset = scaledHeight - 48; // Start with only bottom 48px visible
-                const currentOffset = initialOffset - (backgroundOffset * 1.6);
+                const visualHorizonY = canvas.height * 0.5;
+                const initialOffset = scaledHeight - 48;
+                const currentOffset = initialOffset - backgroundOffset;
                 const backgroundY = visualHorizonY - scaledHeight + currentOffset;
 
-                // Draw the entire image, positioned to rise from below
                 ctx.drawImage(
                     backgroundImage,
-                    0, 0, // Source: entire image
-                    originalWidth, originalHeight, // Source dimensions
-                    backgroundX, backgroundY, // Destination position (moves up over time)
-                    scaledWidth, scaledHeight // Destination dimensions (scaled)
+                    0, 0,
+                    originalWidth, originalHeight,
+                    backgroundX, backgroundY,
+                    scaledWidth, scaledHeight
                 );
             }
 
@@ -545,17 +648,23 @@
         function drawEnemy(enemy) {
             const pos = project3D(enemy.x, 0, enemy.z);
             if (pos.scale > 0.05 && enemy.z > 0 && enemy.z < 2000) {
-                const size = 80 * pos.scale;
+                const size = 112 * pos.scale;
 
-                ctx.fillStyle = '#ff4444';
-                ctx.fillRect(pos.x - size / 2, pos.y - size, size, size);
+                ctx.save();
+                ctx.translate(pos.x, pos.y - size / 2 + enemy.bobOffset);
 
-                ctx.fillStyle = '#cc2222';
-                ctx.fillRect(pos.x - size / 3, pos.y - size * 1.3, size * 0.66, size * 0.3);
+                if (enemy.flipped) {
+                    ctx.scale(-1, 1);
+                }
 
-                ctx.fillStyle = '#ffff00';
-                ctx.fillRect(pos.x - size / 3, pos.y - size * 0.8, size / 6, size / 6);
-                ctx.fillRect(pos.x + size / 6, pos.y - size * 0.8, size / 6, size / 6);
+                ctx.rotate(enemy.angle * Math.PI / 180);
+
+                ctx.drawImage(
+                    remixBotSprite,
+                    -size / 2, -size / 2,
+                    size, size
+                );
+                ctx.restore();
             }
         }
 
@@ -601,19 +710,15 @@
                 ctx.translate(pos.x, screenY);
                 ctx.rotate(gunPickup.rotation);
 
-                // Gun body
                 ctx.fillStyle = '#444444';
                 ctx.fillRect(-size * 1.2, -size * 0.3, size * 2.4, size * 0.6);
 
-                // Gun barrel
                 ctx.fillStyle = '#666666';
                 ctx.fillRect(size * 0.8, -size * 0.2, size * 0.8, size * 0.4);
 
-                // Gun handle
                 ctx.fillStyle = '#333333';
                 ctx.fillRect(-size * 0.4, -size * 0.3, size * 0.8, size * 1.2);
 
-                // Highlight
                 ctx.fillStyle = '#888888';
                 ctx.fillRect(-size * 1.1, -size * 0.2, size * 2.2, size * 0.2);
 
@@ -661,8 +766,88 @@
             }
         }
 
+        // New spark system for player hit feedback
+        function createPlayerHitSparks(x, y) {
+            const numSparks = 16;
+            const sparkSpeed = 1200; // Much faster
+
+            for (let i = 0; i < numSparks; i++) {
+                const angle = (Math.PI * 2 * i) / numSparks + Math.random() * 0.6 - 0.3;
+                const speed = sparkSpeed + Math.random() * 1200; // More speed variation
+
+                const spark = {
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    width: 40 + Math.random() * 80,
+                    height: 8,
+                    alpha: 1,
+                    timer: 0,
+                    movementTime: 100 + Math.random() * 100, // How long they travel (150-250ms)
+                    fadeTime: 100, // How long they take to fade after stopping
+                    totalLife: 0, // Will be calculated
+                    isMoving: true,
+                    rotation: angle
+                };
+
+                spark.totalLife = spark.movementTime + spark.fadeTime;
+                playerHitSparks.push(spark);
+            }
+        }
+
+        function updatePlayerHitSparks(dt) {
+            playerHitSparks = playerHitSparks.filter(spark => {
+                spark.timer += dt * 1000;
+                if (spark.timer > spark.totalLife) return false;
+
+                // Movement phase
+                if (spark.timer < spark.movementTime) {
+                    spark.x += spark.vx * dt;
+                    spark.y += spark.vy * dt;
+                    spark.alpha = 1;
+                }
+                // Fade phase (starts immediately when movement stops)
+                else {
+                    const fadeProgress = (spark.timer - spark.movementTime) / spark.fadeTime;
+                    spark.alpha = Math.max(0, 1 - fadeProgress);
+                }
+
+                return true;
+            });
+        }
+
+        function drawPlayerHitSparks() {
+            for (let spark of playerHitSparks) {
+                ctx.save();
+                ctx.globalAlpha = spark.alpha;
+
+                // Move to spark position and rotate
+                ctx.translate(spark.x, spark.y);
+                ctx.rotate(spark.rotation);
+
+                // Draw main spark body with gradient effect
+                const gradient = ctx.createLinearGradient(-spark.width / 2, 0, spark.width / 2, 0);
+                gradient.addColorStop(0, 'rgba(255, 100, 100, 0)'); // Transparent red at ends
+                gradient.addColorStop(0.5, '#ff3333'); // Bright red in center
+                gradient.addColorStop(1, 'rgba(255, 100, 100, 0)'); // Transparent red at ends
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(-spark.width / 2, -spark.height / 2, spark.width, spark.height);
+
+                // Add bright white core for impact
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-spark.width / 4, -spark.height / 4, spark.width / 2, spark.height / 2);
+
+                // Add red outline for definition
+                ctx.strokeStyle = '#cc0000';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-spark.width / 2, -spark.height / 2, spark.width, spark.height);
+
+                ctx.restore();
+            }
+        }
         function generateArithmeticGate() {
-            // Generate range based on number of guns: 5-20 * guns
             const minValue = 5 * player.guns;
             const maxValue = 20 * player.guns;
             const range = maxValue - minValue + 1;
@@ -777,28 +962,63 @@
 
             const pos = project3D(boss.x, -100, boss.z);
             if (pos.scale > 0.05 && boss.z > 0 && boss.z < 2000) {
-                const size = 200 * pos.scale;
+                const size = 240 * pos.scale;
 
-                ctx.fillStyle = '#8B0000';
-                ctx.fillRect(pos.x - size / 2, pos.y - size, size, size);
+                ctx.save();
+                ctx.translate(pos.x, pos.y - size + boss.bobOffset);
 
-                ctx.fillStyle = '#ff0000';
-                ctx.fillRect(pos.x - size / 2.5, pos.y - size * 0.9, size * 0.8, size * 0.7);
+                if (boss.flipped) {
+                    ctx.scale(-1, 1);
+                }
 
-                ctx.fillStyle = '#ffff00';
-                ctx.fillRect(pos.x - size / 3, pos.y - size * 0.7, size / 4, size / 4);
-                ctx.fillRect(pos.x + size / 12, pos.y - size * 0.7, size / 4, size / 4);
+                ctx.rotate(boss.angle * Math.PI / 180);
+
+                ctx.drawImage(
+                    remixBossSprite,
+                    -size / 2, -size / 2,
+                    size, size
+                );
+                ctx.restore();
 
                 const barWidth = size * 1.5;
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                ctx.fillRect(pos.x - barWidth / 2, pos.y - size - 60, barWidth, 20);
+                ctx.fillRect(pos.x - barWidth / 2, pos.y - size - 60 + boss.bobOffset, barWidth, 20);
                 ctx.fillStyle = '#00ff00';
-                ctx.fillRect(pos.x - barWidth / 2, pos.y - size - 60, barWidth * (boss.hp / boss.maxHp), 20);
+                ctx.fillRect(pos.x - barWidth / 2, pos.y - size - 60 + boss.bobOffset, barWidth * (boss.hp / boss.maxHp), 20);
 
                 ctx.fillStyle = 'white';
                 ctx.font = `bold ${Math.max(16, 24 * pos.scale)}px 'Press Start 2P', monospace`;
                 ctx.textAlign = 'center';
-                ctx.fillText('LEVEL 99 REMIX BOSS', pos.x, pos.y - size - 80);
+                ctx.fillText('LEVEL 99 REMIX BOSS', pos.x, pos.y - size - 80 + boss.bobOffset);
+            }
+        }
+
+        function createBossHitSparks(x, y, scale) {
+            const numSparks = Math.max(4, Math.floor(8 * scale)); // Scale number of sparks
+            const sparkSpeed = 800 * scale; // Scale speed
+
+            for (let i = 0; i < numSparks; i++) {
+                const angle = (Math.PI * 2 * i) / numSparks + Math.random() * 0.6 - 0.3;
+                const speed = sparkSpeed + Math.random() * (400 * scale);
+
+                const spark = {
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    width: Math.max(8, 20 * scale) + Math.random() * (20 * scale),
+                    height: Math.max(3, 6 * scale),
+                    alpha: 1,
+                    timer: 0,
+                    movementTime: 120 + Math.random() * 80,
+                    fadeTime: 150,
+                    totalLife: 0,
+                    isMoving: true,
+                    rotation: angle
+                };
+
+                spark.totalLife = spark.movementTime + spark.fadeTime;
+                playerHitSparks.push(spark); // Reuse the same array and drawing function
             }
         }
 
@@ -807,18 +1027,18 @@
 
             const pos = project3D(bossDeathAnimation.x, -100, bossDeathAnimation.z);
             if (pos.scale > 0.05) {
-                const baseSize = 200 * pos.scale;
-                const size = baseSize * bossDeathAnimation.scale;
+                const baseSize = 240 * pos.scale;
+                const sizeX = baseSize * bossDeathAnimation.scaleX;
+                const sizeY = baseSize * bossDeathAnimation.scaleY;
 
-                ctx.fillStyle = '#8B0000';
-                ctx.fillRect(pos.x - size / 2, pos.y - size, size, size);
-
-                ctx.fillStyle = '#ff0000';
-                ctx.fillRect(pos.x - size / 2.5, pos.y - size * 0.9, size * 0.8, size * 0.7);
-
-                ctx.fillStyle = '#ffff00';
-                ctx.fillRect(pos.x - size / 3, pos.y - size * 0.7, size / 4, size / 4);
-                ctx.fillRect(pos.x + size / 12, pos.y - size * 0.7, size / 4, size / 4);
+                ctx.save();
+                ctx.translate(pos.x, pos.y - sizeY / 2);
+                ctx.drawImage(
+                    remixBossSprite,
+                    -sizeX / 2, -sizeY / 2,
+                    sizeX, sizeY
+                );
+                ctx.restore();
             }
         }
 
@@ -867,14 +1087,10 @@
 
         function createEnemyDeathAnimation(x, z) {
             const pos = project3D(x, 0, z);
-            // Make the threshold more lenient so we see more death animations
             if (pos.scale < 0.02) return;
 
-            console.log('Creating death animation at', x, z, 'screen pos', pos.x, pos.y, 'scale', pos.scale);
-
-            // Create golden spark particles shooting outward
             const numSparks = 12;
-            const sparkSpeed = 400; // Increased for more visibility
+            const sparkSpeed = 400;
 
             for (let i = 0; i < numSparks; i++) {
                 const angle = (Math.PI * 2 * i) / numSparks + Math.random() * 0.5 - 0.25;
@@ -885,49 +1101,42 @@
                     y: pos.y,
                     vx: Math.cos(angle) * speed * pos.scale,
                     vy: Math.sin(angle) * speed * pos.scale,
-                    size: Math.max(2, 4 * pos.scale), // Ensure minimum size
+                    size: Math.max(2, 4 * pos.scale),
                     alpha: 1,
                     timer: 0,
-                    maxLife: 800 // Longer life for visibility
+                    maxLife: 800
                 };
 
                 enemySparks.push(spark);
             }
 
-            // Create rotating enemy sprite for death animation
             const deathSprite = {
                 x: pos.x,
                 y: pos.y,
-                size: Math.max(20, 80 * pos.scale), // Ensure minimum size
+                size: Math.max(20, 112 * pos.scale),
                 rotation: 0,
+                rotationDirection: Math.random() < 0.5 ? 1 : -1,
                 alpha: 1,
                 timer: 0,
-                maxLife: 600 // Longer for visibility
+                maxLife: 600
             };
 
             enemyDeathSprites.push(deathSprite);
-            console.log('Added', enemySparks.length, 'sparks and', enemyDeathSprites.length, 'death sprites');
         }
 
         function updateEnemyDeathEffects(dt) {
-            // Update and draw death sparks
             enemySparks = enemySparks.filter(spark => {
                 spark.timer += dt * 1000;
                 if (spark.timer > spark.maxLife) return false;
 
-                // Update position
                 spark.x += spark.vx * dt;
-                spark.y += spark.vy * dt + 50 * dt; // Reduced gravity for more visibility
-
-                // Update alpha
+                spark.y += spark.vy * dt + 50 * dt;
                 spark.alpha = Math.max(0, 1 - (spark.timer / spark.maxLife));
 
-                // Draw spark - make more visible
                 ctx.save();
                 ctx.globalAlpha = spark.alpha;
                 ctx.fillStyle = '#FFD700';
                 ctx.fillRect(spark.x - spark.size, spark.y - spark.size, spark.size * 2, spark.size * 2);
-                // Add bright outline for visibility
                 ctx.strokeStyle = '#FFFF00';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(spark.x - spark.size, spark.y - spark.size, spark.size * 2, spark.size * 2);
@@ -936,62 +1145,54 @@
                 return true;
             });
 
-            // Update and draw death sprites
             enemyDeathSprites = enemyDeathSprites.filter(sprite => {
                 sprite.timer += dt * 1000;
                 if (sprite.timer > sprite.maxLife) return false;
 
-                // Update rotation (90 degrees over lifetime)
-                sprite.rotation = (sprite.timer / sprite.maxLife) * Math.PI / 2;
-
-                // Update alpha (fade out)
+                sprite.rotation = (sprite.timer / sprite.maxLife) * Math.PI / 2 * sprite.rotationDirection;
                 sprite.alpha = Math.max(0, 1 - (sprite.timer / sprite.maxLife));
 
-                // Draw rotated enemy sprite - make more visible
                 ctx.save();
                 ctx.globalAlpha = sprite.alpha;
                 ctx.translate(sprite.x, sprite.y);
                 ctx.rotate(sprite.rotation);
 
-                // Draw with bright colors for visibility
-                ctx.fillStyle = '#ff6666'; // Brighter red
-                ctx.fillRect(-sprite.size / 2, -sprite.size / 2, sprite.size, sprite.size);
-                ctx.fillStyle = '#dd4444'; // Brighter dark red
-                ctx.fillRect(-sprite.size / 3, -sprite.size * 0.65, sprite.size * 0.66, sprite.size * 0.3);
-                ctx.fillStyle = '#ffff44'; // Brighter yellow
-                ctx.fillRect(-sprite.size / 3, -sprite.size * 0.4, sprite.size / 6, sprite.size / 6);
-                ctx.fillRect(sprite.size / 6, -sprite.size * 0.4, sprite.size / 6, sprite.size / 6);
+                ctx.drawImage(
+                    remixBotSprite,
+                    -sprite.size / 2, -sprite.size / 2,
+                    sprite.size, sprite.size
+                );
 
                 ctx.restore();
 
                 return true;
             });
-
-            // Debug info
-            if (enemySparks.length > 0 || enemyDeathSprites.length > 0) {
-                console.log('Active effects:', enemySparks.length, 'sparks,', enemyDeathSprites.length, 'death sprites');
-            }
         }
 
         function drawPlayer() {
             const screenPos = project3D(player.x, 0, 0);
             const x = screenPos.x;
-            const y = PLAYER_Y;
+            const y = PLAYER_Y + player.bobOffset;
 
-            // Bright red flash when hit (single flash, not blinking)
-            const isFlashing = player.hitFlash > 0;
+            const size = 96;
 
-            ctx.fillStyle = isFlashing ? '#ff0000' : '#ff69b4';
-            ctx.fillRect(x - 40, y - 60, 80, 60);
+            ctx.save();
+            ctx.translate(x, y - size / 2);
 
-            ctx.fillStyle = isFlashing ? '#ff0000' : '#fdbcb4';
-            ctx.beginPath();
-            ctx.arc(x, y - 90, 30, 0, Math.PI * 2);
-            ctx.fill();
+            if (player.flipped) {
+                ctx.scale(-1, 1);
+                ctx.rotate(-player.angle * Math.PI / 180);
+            } else {
+                ctx.rotate(player.angle * Math.PI / 180);
+            }
 
-            ctx.fillStyle = '#000';
-            ctx.fillRect(x - 16, y - 94, 8, 8);
-            ctx.fillRect(x + 8, y - 94, 8, 8);
+            ctx.drawImage(
+                remixetteBackSprite,
+                -size / 2, -size / 2,
+                size, size
+            );
+
+            ctx.restore();
 
             ctx.fillStyle = 'white';
             ctx.font = '20px "Press Start 2P", monospace';
@@ -1008,25 +1209,65 @@
         function updateGame(dt) {
             tunnelOffset += dt * 5;
             gameTime += dt;
-
-            // Background rises 1 pixel per second
             backgroundOffset += dt;
 
-            // Keyboard movement
+            let wasMoving = player.movingRight;
+            player.movingRight = false;
+
             if (moveLeft) {
                 player.x -= dt * 3;
                 usingKeyboard = true;
+                if (player.flipped) {
+                    player.flipped = false;
+                    player.angle = -player.angle;
+                }
             }
             if (moveRight) {
                 player.x += dt * 3;
                 usingKeyboard = true;
+                player.movingRight = true;
+                if (!player.flipped) {
+                    player.flipped = true;
+                    player.angle = -player.angle;
+                }
             }
 
-            // Mouse movement (only if not using keyboard)
             if (!moveLeft && !moveRight && !usingKeyboard) {
                 const targetX = ((mouseX / canvas.width) - 0.5) * 2;
-                player.x += (targetX - player.x) * 0.2;
+                const deltaX = targetX - player.x;
+                if (Math.abs(deltaX) > 0.01) {
+                    player.x += deltaX * 0.2;
+                    if (deltaX > 0) {
+                        if (!player.flipped) {
+                            player.flipped = true;
+                            player.angle = -player.angle;
+                        }
+                        player.movingRight = true;
+                    } else {
+                        if (player.flipped) {
+                            player.flipped = false;
+                            player.angle = -player.angle;
+                        }
+                    }
+                }
             }
+
+            // Update player animation
+            player.angleTimer += dt;
+            player.bobTimer += dt;
+
+            if (player.angleTimer >= 0.02) {
+                player.angle += 2 * player.angleDirection;
+                player.angleTimer = 0;
+
+                if (player.angle >= 10) {
+                    player.angleDirection = -1;
+                } else if (player.angle <= -10) {
+                    player.angleDirection = 1;
+                }
+            }
+
+            player.bobOffset = Math.sin(player.bobTimer * 20) * 5;
 
             player.x = Math.max(-0.8, Math.min(0.8, player.x));
 
@@ -1040,17 +1281,15 @@
                     });
                 }
                 player.ammo -= player.guns;
-                player.ammo = Math.max(0, player.ammo); // Prevent negative ammo
-                ammoShake = 0.3; // Trigger shake animation
+                player.ammo = Math.max(0, player.ammo);
+                ammoShake = 0.3;
                 shootCooldown = 0.2;
             }
             shootCooldown = Math.max(0, shootCooldown - dt);
 
-            // Update bullets - Fixed to disappear at horizon
             bullets = bullets.filter(bullet => {
                 bullet.z += bullet.speed * dt;
 
-                // Remove bullets that reach the horizon (z > 2000)
                 if (bullet.z > 2000) return false;
 
                 for (let enemy of enemies) {
@@ -1060,8 +1299,6 @@
                             enemies = enemies.filter(e => e !== enemy);
                             player.score += 1;
                             scorePulse = 0.2;
-
-                            // Create enemy death animation
                             createEnemyDeathAnimation(enemy.x, enemy.z);
                         }
                         return false;
@@ -1070,20 +1307,28 @@
 
                 if (boss && Math.abs(bullet.x - boss.x) < 0.3 && Math.abs(bullet.z - boss.z) < 150) {
                     boss.hp -= player.damage;
+
+                    // Add boss hit sparks when hit
+                    const bossPos = project3D(boss.x, -100, boss.z);
+                    if (bossPos.scale > 0.05) {
+                        createBossHitSparks(bossPos.x, bossPos.y - (240 * bossPos.scale) / 2, bossPos.scale);
+                    }
+
                     if (boss.hp <= 0) {
-                        // Start boss death animation
                         bossDeathAnimation = {
                             x: boss.x,
                             z: boss.z,
-                            phase: 'growing', // 'growing' or 'squashing'
-                            scale: 1.0,
+                            phase: 'growing',
+                            scaleX: 1.0,
+                            scaleY: 1.0,
                             timer: 0,
-                            duration: 2000 // 2 second animation
+                            growthDuration: 1000, // 1 second for growth
+                            squashDuration: 4000, // 4 seconds for dramatic squashing
+                            totalDuration: 5000,
+                            scoreCalculated: false
                         };
                         boss = null;
-                        setTimeout(() => {
-                            showLevelMultiplier();
-                        }, 2000); // Wait for animation to complete
+                        // Start score calculation immediately when squashing begins
                     }
                     return false;
                 }
@@ -1091,27 +1336,48 @@
                 return true;
             });
 
-            // Update enemies - Removed invincibility system
+            // Update enemies WITH ANIMATION
             enemies = enemies.filter(enemy => {
                 enemy.z -= enemy.speed * dt;
 
-                // Check collision if enemy is directly in front of player
+                // Update enemy animations
+                enemy.flipTimer += dt;
+                enemy.angleTimer += dt;
+                enemy.bobTimer += dt;
+
+                if (enemy.flipTimer >= 1) {
+                    enemy.flipped = !enemy.flipped;
+                    enemy.flipTimer = 0;
+                    enemy.angle = -enemy.angle;
+                }
+
+                if (enemy.angleTimer >= 0.1) {
+                    enemy.angle += 5 * enemy.angleDirection;
+                    enemy.angleTimer = 0;
+                    if (enemy.angle >= 20) {
+                        enemy.angleDirection = -1;
+                    } else if (enemy.angle <= -20) {
+                        enemy.angleDirection = 1;
+                    }
+                }
+
+                enemy.bobOffset = Math.sin(enemy.bobTimer * 10) * 6;
+
                 if (enemy.z <= 120 && enemy.z >= 80 && Math.abs(enemy.x - player.x) < 0.25) {
-                    // Always take damage, no invincibility period
                     player.level = Math.max(0, player.level - 1);
-                    player.hitFlash = 0.5; // Extended flash duration to 0.5 seconds
+                    player.hitFlash = 0.5;
+
+                    // Create hit impact sparks
+                    const screenPos = project3D(player.x, 0, 0);
+                    createPlayerHitSparks(screenPos.x, PLAYER_Y + player.bobOffset);
 
                     if (player.level <= 0) {
                         gameRunning = false;
-                        // Game over - just reload, keep music playing
                         setTimeout(() => {
-                            // Farcade SDK: Call gameOver with score, don't auto-restart if Farcade is present
                             if (window.FarcadeSDK) {
                                 window.FarcadeSDK.singlePlayer.actions.gameOver({ score: player.score });
                                 console.log('Farcade SDK: Game over signal sent with score:', player.score);
-                                // Don't reload - wait for Farcade play_again signal
                             } else {
-                                // Normal behavior: auto-restart
                                 location.reload();
                             }
                         }, 100);
@@ -1122,7 +1388,6 @@
                 return enemy.z > -200;
             });
 
-            // Update coins - super forgiving pickup (200% increase)
             coins = coins.filter(coin => {
                 coin.z -= TUNNEL_SPEED * dt;
                 coin.rotation += dt * 3;
@@ -1140,9 +1405,7 @@
                     coin.dropY = floorPos.y;
                 }
 
-                // Super forgiving coin pickup - collision area increased by 200%
                 if (coin.z <= 100 && coin.z >= 0 && Math.abs(coin.x - player.x) < 1.05 && coin.landed) {
-                    // Apply streak multiplier to coin points
                     const coinValue = 100 * Math.max(1, player.streak);
                     player.score += coinValue;
                     scorePulse = 0.8;
@@ -1152,7 +1415,6 @@
                 return coin.z > -100;
             });
 
-            // Update gun pickups - super forgiving pickup (200% increase)
             gunPickups = gunPickups.filter(gunPickup => {
                 gunPickup.z -= TUNNEL_SPEED * dt;
                 gunPickup.rotation += dt * 2;
@@ -1170,7 +1432,6 @@
                     gunPickup.dropY = floorPos.y;
                 }
 
-                // Super forgiving gun pickup - collision area increased by 200%
                 if (gunPickup.z <= 120 && gunPickup.z >= 0 && Math.abs(gunPickup.x - player.x) < 1.2) {
                     player.guns++;
                     return false;
@@ -1179,7 +1440,6 @@
                 return gunPickup.z > -100;
             });
 
-            // Update gates with congratulations system
             gates = gates.filter(gate => {
                 gate.z -= TUNNEL_SPEED * dt;
 
@@ -1194,13 +1454,12 @@
                         isRightChoice = gate.leftProblem.value >= gate.rightProblem.value;
                     } else {
                         ammoGained = gate.rightProblem.value;
-                        isRightChoice = gate.rightProblem.value >= gate.leftProblem.value;
+                        isRightChoice = gate.rightProblem.value >= gate.rightProblem.value;
                     }
 
                     player.ammo += ammoGained;
                     ammoPulse = 1.0;
 
-                    // Streak and congratulations system
                     if (isRightChoice) {
                         player.streak++;
 
@@ -1215,9 +1474,9 @@
 
                         congratulations.push({
                             text: `${randomWord} x${player.streak}`,
-                            x: Math.random() * canvas.width * 0.5 + canvas.width * 0.25, // Middle 50%
+                            x: Math.random() * canvas.width * 0.5 + canvas.width * 0.25,
                             y: Math.random() * 300 + 100,
-                            rotation: (Math.random() - 0.5) * Math.PI / 3, // +/- 30 degrees
+                            rotation: (Math.random() - 0.5) * Math.PI / 3,
                             timer: 3.0,
                             scale: 1.0 + (player.streak - 1) * 0.1
                         });
@@ -1225,7 +1484,6 @@
                         player.streak = 0;
                     }
 
-                    // Display ammo gained as +XX (bigger text)
                     ammoDisplays.push({
                         text: `+${ammoGained}`,
                         x: Math.random() * canvas.width * 0.6 + canvas.width * 0.2,
@@ -1236,7 +1494,6 @@
                     player.level++;
                     player.gatesPassed++;
 
-                    // Don't level up past 100 to prevent farming point multipliers
                     if (player.level > 100) {
                         player.level = 100;
                     }
@@ -1245,9 +1502,17 @@
                         boss = {
                             x: 0,
                             z: 1500,
-                            hp: 1000, // Dramatically increased HP
+                            hp: 1000,
                             maxHp: 1000,
-                            shootTimer: 0
+                            shootTimer: 0,
+                            // Add animation properties like enemies have
+                            flipTimer: 0,
+                            flipped: false,
+                            angleTimer: 0,
+                            angle: 0,
+                            angleDirection: 1,
+                            bobTimer: 0,
+                            bobOffset: 0
                         };
                         enemies = [];
                     }
@@ -1256,39 +1521,66 @@
                 return gate.z > -500;
             });
 
-            // Update boss
             if (boss) {
+                // Sine wave movement
                 boss.x = Math.sin(gameTime * 2) * 0.5;
                 boss.z = Math.max(1000, boss.z - 50 * dt);
 
+                // Add the same animations as enemies
+                boss.flipTimer += dt;
+                boss.angleTimer += dt;
+                boss.bobTimer += dt;
+
+                if (boss.flipTimer >= 1.5) { // Slightly slower flips for boss
+                    boss.flipped = !boss.flipped;
+                    boss.flipTimer = 0;
+                    boss.angle = -boss.angle;
+                }
+
+                if (boss.angleTimer >= 0.08) { // Slightly slower angle changes
+                    boss.angle += 3 * boss.angleDirection;
+                    boss.angleTimer = 0;
+                    if (boss.angle >= 15) {
+                        boss.angleDirection = -1;
+                    } else if (boss.angle <= -15) {
+                        boss.angleDirection = 1;
+                    }
+                }
+
+                boss.bobOffset = Math.sin(boss.bobTimer * 12) * 8; // Slightly more pronounced bob
+
                 boss.shootTimer -= dt;
                 if (boss.shootTimer <= 0) {
-                    // Fire red projectiles instead of enemies
-                    const spread = Math.random() * 0.6 - 0.3; // Random spread
+                    const spread = Math.random() * 0.6 - 0.3;
                     bossProjectiles.push({
                         x: boss.x + spread,
-                        z: boss.z, // Start right at the boss position
-                        speed: TUNNEL_SPEED * 1.6 // Much faster projectiles (2x original speed)
+                        z: boss.z,
+                        speed: TUNNEL_SPEED * 1.6
                     });
-                    boss.shootTimer = 0.4; // Shoot twice as fast
+                    boss.shootTimer = 0.4;
                 }
             }
 
-            // Update boss projectiles (can't be destroyed, must be dodged)
             bossProjectiles = bossProjectiles.filter(projectile => {
                 projectile.z -= projectile.speed * dt;
 
-                // Check collision with player
                 if (projectile.z <= 120 && projectile.z >= 80 && Math.abs(projectile.x - player.x) < 0.25) {
-                    // Player gets hit by boss projectile
                     player.level = Math.max(0, player.level - 1);
                     player.hitFlash = 0.5;
 
+                    // Create hit impact sparks
+                    const screenPos = project3D(player.x, 0, 0);
+                    createPlayerHitSparks(screenPos.x, PLAYER_Y + player.bobOffset);
+
                     if (player.level <= 0) {
                         gameRunning = false;
-                        // Keep music playing even on game over
                         setTimeout(() => {
-                            location.reload();
+                            if (window.FarcadeSDK) {
+                                window.FarcadeSDK.singlePlayer.actions.gameOver({ score: player.score });
+                                console.log('Farcade SDK: Game over signal sent with score:', player.score);
+                            } else {
+                                location.reload();
+                            }
                         }, 100);
                     }
                     return false;
@@ -1297,7 +1589,6 @@
                 return projectile.z > -200;
             });
 
-            // Spawn enemies - gentler start, same end game intensity
             if (!boss) {
                 enemySpawnTimer -= dt;
                 if (enemySpawnTimer <= 0) {
@@ -1305,14 +1596,20 @@
                         x: (Math.random() - 0.5) * 1.8,
                         z: 1800,
                         speed: TUNNEL_SPEED * 1.5,
-                        hp: 1
+                        hp: 1,
+                        flipTimer: 0,
+                        flipped: false,
+                        angleTimer: 0,
+                        angle: 0,
+                        angleDirection: 1,
+                        bobTimer: 0,
+                        bobOffset: 0
                     });
-                    const spawnRate = 0.5 + (player.gatesPassed / 100) * 39.5; // Scale from 0.5 to 40 per second
+                    const spawnRate = 0.5 + (player.gatesPassed / 100) * 39.5;
                     enemySpawnTimer = 1 / spawnRate;
                 }
             }
 
-            // Spawn coins (stop spawning after boss appears)
             if (!boss) {
                 coinSpawnTimer -= dt;
                 if (coinSpawnTimer <= 0) {
@@ -1328,7 +1625,6 @@
                 }
             }
 
-            // Spawn gun pickups every 60 seconds
             gunSpawnTimer -= dt;
             if (gunSpawnTimer <= 0 && !boss) {
                 gunPickups.push({
@@ -1342,7 +1638,6 @@
                 gunSpawnTimer = 60;
             }
 
-            // Spawn gates (continue even with boss to allow ammo refill)
             gateSpawnTimer -= dt;
             if (gateSpawnTimer <= 0) {
                 const problems = generateArithmeticGate();
@@ -1355,8 +1650,7 @@
                 gateSpawnTimer = 4;
             }
 
-            // Update UI animations and congratulations
-            player.hitFlash = Math.max(0, player.hitFlash - dt * 2); // Decrement hit flash timer
+            player.hitFlash = Math.max(0, player.hitFlash - dt * 2);
             ammoShake = Math.max(0, ammoShake - dt * 3);
             ammoPulse = Math.max(0, ammoPulse - dt);
             scorePulse = Math.max(0, scorePulse - dt);
@@ -1373,43 +1667,49 @@
                 return display.timer > 0;
             });
 
-            // Update enemy death effects
             updateEnemyDeathEffects(dt);
+            updatePlayerHitSparks(dt);
 
-            // Update boss death animation
             if (bossDeathAnimation) {
                 bossDeathAnimation.timer += dt * 1000;
-                const progress = bossDeathAnimation.timer / bossDeathAnimation.duration;
+                const progress = bossDeathAnimation.timer / bossDeathAnimation.totalDuration;
 
                 if (bossDeathAnimation.phase === 'growing') {
-                    // Grow dramatically over first 70% of animation
-                    if (progress < 0.7) {
-                        bossDeathAnimation.scale = 1.0 + (progress / 0.7) * 4.0; // Scale to 5x size
+                    if (bossDeathAnimation.timer < bossDeathAnimation.growthDuration) {
+                        const growthProgress = bossDeathAnimation.timer / bossDeathAnimation.growthDuration;
+                        bossDeathAnimation.scaleX = 1.0 + (growthProgress * 4.0);
+                        bossDeathAnimation.scaleY = 1.0 + (growthProgress * 4.0);
                     } else {
-                        // Switch to squashing phase
+                        // Start squashing phase and score calculation
                         bossDeathAnimation.phase = 'squashing';
-                        bossDeathAnimation.scale = 5.0;
+                        bossDeathAnimation.scaleX = 5.0;
+                        bossDeathAnimation.scaleY = 5.0;
+
+                        if (!bossDeathAnimation.scoreCalculated) {
+                            bossDeathAnimation.scoreCalculated = true;
+                            showLevelMultiplier(); // Start score count NOW
+                        }
                     }
                 } else if (bossDeathAnimation.phase === 'squashing') {
-                    // Squash down over remaining 30% of animation
-                    const squashProgress = (progress - 0.7) / 0.3;
-                    bossDeathAnimation.scale = 5.0 - (squashProgress * 5.0); // Scale back down to 0
+                    const squashTime = bossDeathAnimation.timer - bossDeathAnimation.growthDuration;
+                    const squashProgress = squashTime / bossDeathAnimation.squashDuration;
+
+                    // Much more dramatic pancaking effect over 4 seconds
+                    bossDeathAnimation.scaleX = 5.0 + (squashProgress * 8.0); // Gets much wider
+                    bossDeathAnimation.scaleY = 5.0 * Math.max(0.01, 1 - squashProgress * 0.99); // Gets extremely flat
                 }
 
-                // Remove animation when complete
                 if (progress >= 1.0) {
                     bossDeathAnimation = null;
                 }
             }
 
-            // Update UI with animations
             const scoreElement = document.getElementById('score');
             const ammoElement = document.getElementById('ammo');
 
             scoreElement.textContent = player.score;
             ammoElement.textContent = player.ammo;
 
-            // Apply CSS animations
             if (scorePulse > 0.6) {
                 scoreElement.classList.add('pulse');
                 setTimeout(() => scoreElement.classList.remove('pulse'), 300);
@@ -1455,17 +1755,16 @@
             }
 
             bullets.forEach(drawBullet);
-            bossProjectiles.forEach(drawBossProjectile); // Draw boss projectiles
+            bossProjectiles.forEach(drawBossProjectile);
 
-            // Update and draw enemy death effects
             updateEnemyDeathEffects(dt);
 
-            // Draw boss death animation if active
             drawBossDeathAnimation();
 
             drawCongratulations();
             drawAmmoDisplays();
             drawPlayer();
+            drawPlayerHitSparks();
 
             requestAnimationFrame(gameLoop);
         }
@@ -1474,39 +1773,36 @@
 
         function showLevelMultiplier() {
             gameRunning = false;
-            // Keep music playing even on victory
             const finalLevel = player.level;
             const baseScore = player.score;
 
-            // Create level text element
             const levelDisplay = document.createElement('div');
             levelDisplay.textContent = `LVL ${finalLevel}`;
             levelDisplay.style.cssText = `
-                position: fixed;
-                left: 50%;
-                top: 50%;
-                transform: translateX(-50%) translateY(-50%);
-                font-family: 'Press Start 2P', monospace;
-                font-size: 64px;
-                color: #ffff00;
-                text-shadow: 3px 3px 0 #000;
-                z-index: 2000;
-                pointer-events: none;
-            `;
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translateX(-50%) translateY(-50%);
+        font-family: 'Press Start 2P', monospace;
+        font-size: 64px;
+        color: #ffff00;
+        text-shadow: 3px 3px 0 #000;
+        z-index: 2000;
+        pointer-events: none;
+    `;
             document.body.appendChild(levelDisplay);
 
-            // Animate level text moving up
             setTimeout(() => {
                 levelDisplay.style.transition = 'all 1.5s ease-out';
                 levelDisplay.style.top = '15%';
                 levelDisplay.style.fontSize = '48px';
             }, 500);
 
-            // Start score multiplication animation
+            // Start score animation after 2 seconds, lasting 3 seconds (synced with squashing)
             setTimeout(() => {
                 let currentScore = baseScore;
                 const targetScore = baseScore * finalLevel;
-                const duration = 2000;
+                const duration = 3000; // 3 seconds to match squashing duration
                 const startTime = Date.now();
 
                 const animateScore = () => {
@@ -1521,15 +1817,13 @@
                     if (progress < 1) {
                         requestAnimationFrame(animateScore);
                     } else {
+                        // Wait a bit longer to let the pancaking finish
                         setTimeout(() => {
                             document.body.removeChild(levelDisplay);
-                            // Farcade SDK: Call gameOver with final score, don't auto-restart if Farcade is present
                             if (window.FarcadeSDK) {
                                 window.FarcadeSDK.singlePlayer.actions.gameOver({ score: targetScore });
                                 console.log('Farcade SDK: Victory signal sent with final score:', targetScore);
-                                // Don't reload - wait for Farcade play_again signal
                             } else {
-                                // Normal behavior: auto-restart
                                 location.reload();
                             }
                         }, 1000);
@@ -1552,21 +1846,29 @@
                 guns: 1,
                 damage: 1,
                 hitFlash: 0,
-                streak: 0
+                streak: 0,
+                angleTimer: 0,
+                angle: 0,
+                angleDirection: 1,
+                flipped: false,
+                movingRight: false,
+                bobTimer: 0,
+                bobOffset: 0
             };
 
             enemies = [];
             coins = [];
             bullets = [];
-            bossProjectiles = []; // Reset boss projectiles
+            bossProjectiles = [];
             gates = [];
             gunPickups = [];
             congratulations = [];
             ammoDisplays = [];
             enemySparks = [];
             enemyDeathSprites = [];
+            playerHitSparks = [];
             boss = null;
-            bossDeathAnimation = null; // Reset boss death animation
+            bossDeathAnimation = null;
 
             ammoShake = 0;
             ammoPulse = 0;
@@ -1578,10 +1880,10 @@
             gunSpawnTimer = 60;
             gameTime = 0;
             lastTime = 0;
-            backgroundOffset = 0; // Reset background progression
+            backgroundOffset = 0;
 
             gameRunning = true;
-            startMusic(); // Start background music
+            startMusic();
             requestAnimationFrame(gameLoop);
         }
 
@@ -1657,7 +1959,6 @@
             }
         });
 
-        // Keyboard controls
         document.addEventListener('keydown', e => {
             if (e.code === 'Space') {
                 e.preventDefault();
@@ -1704,6 +2005,44 @@
                     }
                 } else {
                     // Unmute the music
+                    if (currentTrack) {
+                        currentTrack.volume = 0.7;
+                    }
+                    if (nextTrack) {
+                        nextTrack.volume = 0.7;
+                    }
+                }
+
+                console.log('Farcade SDK: Music mute state set to:', data.isMuted);
+            });
+
+            console.log('Farcade SDK: Event handlers registered.');
+        }
+
+        // Farcade SDK: Signal that the game is fully loaded and ready to play
+        if (window.FarcadeSDK) {
+            window.FarcadeSDK.singlePlayer.actions.ready();
+            console.log('Farcade SDK: Game ready signal sent.');
+        }
+
+        // Farcade SDK: Register event handlers for 'play_again' and 'toggle_mute'
+        if (window.FarcadeSDK) {
+            window.FarcadeSDK.on('play_again', () => {
+                console.log('Farcade SDK: Play again requested.');
+                location.reload();
+            });
+
+            window.FarcadeSDK.on('toggle_mute', (data) => {
+                console.log('Farcade SDK: Mute toggle requested, isMuted:', data.isMuted);
+
+                if (data.isMuted) {
+                    if (currentTrack) {
+                        currentTrack.volume = 0;
+                    }
+                    if (nextTrack) {
+                        nextTrack.volume = 0;
+                    }
+                } else {
                     if (currentTrack) {
                         currentTrack.volume = 0.7;
                     }
