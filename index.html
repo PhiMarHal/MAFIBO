@@ -240,7 +240,6 @@
         // Base URL for all assets
         const BASE_URL = "https://mafibo.loiyaa.com/";
 
-        // Set fixed resolution with scaling
         function resizeCanvas() {
             canvas.width = 800;
             canvas.height = 1200;
@@ -249,7 +248,7 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // Constants for perspective - scaled 2x from original 400x600
+        // Constants for perspective
         const HORIZON_Y = 400;
         const HORIZON_X = 400;
         const PLAYER_Y = canvas.height - 80;
@@ -273,7 +272,6 @@
             damage: 1,
             hitFlash: 0,
             streak: 0,
-            // Animation properties
             angleTimer: 0,
             angle: 0,
             angleDirection: 1,
@@ -296,6 +294,7 @@
         let ammoDisplays = [];
         let enemySparks = [];
         let enemyDeathSprites = [];
+        let playerHitSparks = []; // New: player hit impact sparks
 
         // Background image
         let backgroundImage = new Image();
@@ -345,16 +344,12 @@
             if (!introCanvas) return;
 
             const introCtx = introCanvas.getContext('2d');
-
-            // Set canvas size to match container
             const container = document.getElementById('gameContainer');
             introCanvas.width = container.offsetWidth;
             introCanvas.height = container.offsetHeight;
 
-            // Clear canvas
             introCtx.clearRect(0, 0, introCanvas.width, introCanvas.height);
 
-            // Only draw if all intro sprites are loaded
             if (spritesLoaded.remixetteFront && spritesLoaded.remixBoy && spritesLoaded.remixBoss) {
                 const spriteSize = 120;
                 const canvasWidth = introCanvas.width;
@@ -370,7 +365,7 @@
                     spriteSize, spriteSize
                 );
 
-                // Draw RemixBoy on the right, rotated 90° (lying down)
+                // Draw RemixBoy lying down
                 const remixBoyX = canvasWidth * 0.65;
                 const remixBoyY = canvasHeight * 0.7;
                 introCtx.save();
@@ -383,7 +378,7 @@
                 );
                 introCtx.restore();
 
-                // Draw RemixBoss flipped horizontally and scaled 120%
+                // Draw RemixBoss flipped and scaled
                 const bossSize = spriteSize * 1.2;
                 const bossX = canvasWidth * 0.75;
                 const bossY = canvasHeight * 0.6;
@@ -770,6 +765,87 @@
             }
         }
 
+        // New spark system for player hit feedback
+        function createPlayerHitSparks(x, y) {
+            const numSparks = 16;
+            const sparkSpeed = 1200; // Much faster
+
+            for (let i = 0; i < numSparks; i++) {
+                const angle = (Math.PI * 2 * i) / numSparks + Math.random() * 0.6 - 0.3;
+                const speed = sparkSpeed + Math.random() * 1200; // More speed variation
+
+                const spark = {
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    width: 40 + Math.random() * 80,
+                    height: 8,
+                    alpha: 1,
+                    timer: 0,
+                    movementTime: 100 + Math.random() * 100, // How long they travel (150-250ms)
+                    fadeTime: 100, // How long they take to fade after stopping
+                    totalLife: 0, // Will be calculated
+                    isMoving: true,
+                    rotation: angle
+                };
+
+                spark.totalLife = spark.movementTime + spark.fadeTime;
+                playerHitSparks.push(spark);
+            }
+        }
+
+        function updatePlayerHitSparks(dt) {
+            playerHitSparks = playerHitSparks.filter(spark => {
+                spark.timer += dt * 1000;
+                if (spark.timer > spark.totalLife) return false;
+
+                // Movement phase
+                if (spark.timer < spark.movementTime) {
+                    spark.x += spark.vx * dt;
+                    spark.y += spark.vy * dt;
+                    spark.alpha = 1;
+                }
+                // Fade phase (starts immediately when movement stops)
+                else {
+                    const fadeProgress = (spark.timer - spark.movementTime) / spark.fadeTime;
+                    spark.alpha = Math.max(0, 1 - fadeProgress);
+                }
+
+                return true;
+            });
+        }
+
+        function drawPlayerHitSparks() {
+            for (let spark of playerHitSparks) {
+                ctx.save();
+                ctx.globalAlpha = spark.alpha;
+
+                // Move to spark position and rotate
+                ctx.translate(spark.x, spark.y);
+                ctx.rotate(spark.rotation);
+
+                // Draw main spark body with gradient effect
+                const gradient = ctx.createLinearGradient(-spark.width / 2, 0, spark.width / 2, 0);
+                gradient.addColorStop(0, 'rgba(255, 100, 100, 0)'); // Transparent red at ends
+                gradient.addColorStop(0.5, '#ff3333'); // Bright red in center
+                gradient.addColorStop(1, 'rgba(255, 100, 100, 0)'); // Transparent red at ends
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(-spark.width / 2, -spark.height / 2, spark.width, spark.height);
+
+                // Add bright white core for impact
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-spark.width / 4, -spark.height / 4, spark.width / 2, spark.height / 2);
+
+                // Add red outline for definition
+                ctx.strokeStyle = '#cc0000';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-spark.width / 2, -spark.height / 2, spark.width, spark.height);
+
+                ctx.restore();
+            }
+        }
         function generateArithmeticGate() {
             const minValue = 5 * player.guns;
             const maxValue = 20 * player.guns;
@@ -993,7 +1069,7 @@
                 y: pos.y,
                 size: Math.max(20, 112 * pos.scale),
                 rotation: 0,
-                rotationDirection: Math.random() < 0.5 ? 1 : -1, // Random left or right fall
+                rotationDirection: Math.random() < 0.5 ? 1 : -1,
                 alpha: 1,
                 timer: 0,
                 maxLife: 600
@@ -1052,7 +1128,6 @@
             const x = screenPos.x;
             const y = PLAYER_Y + player.bobOffset;
 
-            const isFlashing = player.hitFlash > 0;
             const size = 96;
 
             ctx.save();
@@ -1063,13 +1138,6 @@
                 ctx.rotate(-player.angle * Math.PI / 180);
             } else {
                 ctx.rotate(player.angle * Math.PI / 180);
-            }
-
-            if (isFlashing) {
-                ctx.globalCompositeOperation = 'multiply';
-                ctx.fillStyle = '#ff0000';
-                ctx.fillRect(-size / 2, -size / 2, size, size);
-                ctx.globalCompositeOperation = 'source-over';
             }
 
             ctx.drawImage(
@@ -1095,7 +1163,6 @@
         function updateGame(dt) {
             tunnelOffset += dt * 5;
             gameTime += dt;
-
             backgroundOffset += dt;
 
             let wasMoving = player.movingRight;
@@ -1106,7 +1173,7 @@
                 usingKeyboard = true;
                 if (player.flipped) {
                     player.flipped = false;
-                    player.angle = -player.angle; // Invert angle on flip
+                    player.angle = -player.angle;
                 }
             }
             if (moveRight) {
@@ -1115,7 +1182,7 @@
                 player.movingRight = true;
                 if (!player.flipped) {
                     player.flipped = true;
-                    player.angle = -player.angle; // Invert angle on flip
+                    player.angle = -player.angle;
                 }
             }
 
@@ -1127,13 +1194,13 @@
                     if (deltaX > 0) {
                         if (!player.flipped) {
                             player.flipped = true;
-                            player.angle = -player.angle; // Invert angle on flip
+                            player.angle = -player.angle;
                         }
                         player.movingRight = true;
                     } else {
                         if (player.flipped) {
                             player.flipped = false;
-                            player.angle = -player.angle; // Invert angle on flip
+                            player.angle = -player.angle;
                         }
                     }
                 }
@@ -1226,7 +1293,6 @@
                 if (enemy.flipTimer >= 1) {
                     enemy.flipped = !enemy.flipped;
                     enemy.flipTimer = 0;
-                    // Invert angle on flip for seamless transition
                     enemy.angle = -enemy.angle;
                 }
 
@@ -1240,12 +1306,15 @@
                     }
                 }
 
-                // Ponderous bobbing - twice slower and twice the amplitude
-                enemy.bobOffset = Math.sin(enemy.bobTimer * 10) * 10;
+                enemy.bobOffset = Math.sin(enemy.bobTimer * 10) * 6;
 
                 if (enemy.z <= 120 && enemy.z >= 80 && Math.abs(enemy.x - player.x) < 0.25) {
                     player.level = Math.max(0, player.level - 1);
                     player.hitFlash = 0.5;
+
+                    // Create hit impact sparks
+                    const screenPos = project3D(player.x, 0, 0);
+                    createPlayerHitSparks(screenPos.x, PLAYER_Y + player.bobOffset);
 
                     if (player.level <= 0) {
                         gameRunning = false;
@@ -1330,7 +1399,7 @@
                         isRightChoice = gate.leftProblem.value >= gate.rightProblem.value;
                     } else {
                         ammoGained = gate.rightProblem.value;
-                        isRightChoice = gate.rightProblem.value >= gate.leftProblem.value;
+                        isRightChoice = gate.rightProblem.value >= gate.rightProblem.value;
                     }
 
                     player.ammo += ammoGained;
@@ -1412,6 +1481,10 @@
                     player.level = Math.max(0, player.level - 1);
                     player.hitFlash = 0.5;
 
+                    // Create hit impact sparks
+                    const screenPos = project3D(player.x, 0, 0);
+                    createPlayerHitSparks(screenPos.x, PLAYER_Y + player.bobOffset);
+
                     if (player.level <= 0) {
                         gameRunning = false;
                         setTimeout(() => {
@@ -1437,7 +1510,6 @@
                         z: 1800,
                         speed: TUNNEL_SPEED * 1.5,
                         hp: 1,
-                        // Animation properties - THIS IS THE KEY PART!
                         flipTimer: 0,
                         flipped: false,
                         angleTimer: 0,
@@ -1509,6 +1581,7 @@
             });
 
             updateEnemyDeathEffects(dt);
+            updatePlayerHitSparks(dt);
 
             if (bossDeathAnimation) {
                 bossDeathAnimation.timer += dt * 1000;
@@ -1591,6 +1664,7 @@
             drawCongratulations();
             drawAmmoDisplays();
             drawPlayer();
+            drawPlayerHitSparks();
 
             requestAnimationFrame(gameLoop);
         }
@@ -1690,6 +1764,7 @@
             ammoDisplays = [];
             enemySparks = [];
             enemyDeathSprites = [];
+            playerHitSparks = [];
             boss = null;
             bossDeathAnimation = null;
 
