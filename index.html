@@ -25,8 +25,10 @@
         }
 
         #gameContainer {
-            width: min(min(90vw, 60vh), 800px);
-            height: min(min(135vw, 90vh), 1200px);
+            width: min(100vw, 66.67vh);
+            /* Use full width, or height*(2/3) if screen is wide */
+            height: min(100vh, 150vw);
+            /* Use full height, or width*(3/2) if screen is tall */
             position: relative;
             background: #000;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -54,46 +56,51 @@
         }
 
         #introScreen h1 {
-            font-size: 96px;
+            font-size: calc(var(--container-width, 800px) * 0.12);
             color: white;
             text-shadow: 6px 6px 0 #000;
-            margin-bottom: 50px;
-            margin-top: -150px;
+            margin-bottom: 0;
+            margin-top: 0;
             animation: pulse 2s infinite;
             z-index: 1002;
-            position: relative;
+            position: absolute;
+            top: 8%;
+            left: 50%;
+            transform: translateX(-50%);
         }
 
         @keyframes pulse {
 
             0%,
             100% {
-                transform: scale(1);
+                transform: translateX(-50%) scale(1);
             }
 
             50% {
-                transform: scale(1.05);
+                transform: translateX(-50%) scale(1.05);
             }
         }
 
         #playButton {
             background: #ff6b6b;
             border: none;
-            padding: 40px 80px;
-            font-size: 32px;
+            padding: calc(var(--container-height, 1200px) * 0.025) calc(var(--container-width, 800px) * 0.08);
+            font-size: calc(var(--container-width, 800px) * 0.04);
             color: white;
             font-family: 'Press Start 2P', monospace;
             cursor: pointer;
-            box-shadow: 0 10px 0 #c44444;
+            box-shadow: 0 calc(var(--container-height, 1200px) * 0.008) 0 #c44444;
             transition: all 0.1s;
             z-index: 1002;
-            position: relative;
-            margin-top: 150px;
+            position: absolute;
+            bottom: 8%;
+            left: 50%;
+            transform: translateX(-50%);
         }
 
         #playButton:hover {
-            transform: translateY(4px);
-            box-shadow: 0 6px 0 #c44444;
+            transform: translateX(-50%) translateY(calc(var(--container-height, 1200px) * 0.003));
+            box-shadow: 0 calc(var(--container-height, 1200px) * 0.005) 0 #c44444;
         }
 
         #gameCanvas {
@@ -174,16 +181,6 @@
         }
 
         @media (max-width: 900px) {
-            #introScreen h1 {
-                font-size: 64px;
-                margin-bottom: 60px;
-            }
-
-            #playButton {
-                padding: 25px 50px;
-                font-size: 20px;
-            }
-
             #score {
                 font-size: 32px;
                 top: 15px;
@@ -196,16 +193,6 @@
         }
 
         @media (max-width: 600px) {
-            #introScreen h1 {
-                font-size: 48px;
-                margin-bottom: 40px;
-            }
-
-            #playButton {
-                padding: 20px 40px;
-                font-size: 16px;
-            }
-
             #score {
                 font-size: 24px;
                 top: 10px;
@@ -246,7 +233,10 @@
         }
 
         resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawIntroScene(); // Update intro scene scaling on resize
+        });
 
         // Constants for perspective
         const HORIZON_Y = 400;
@@ -294,7 +284,7 @@
         let ammoDisplays = [];
         let enemySparks = [];
         let enemyDeathSprites = [];
-        let playerHitSparks = []; // New: player hit impact sparks
+        let playerHitSparks = [];
 
         // Background image
         let backgroundImage = new Image();
@@ -356,16 +346,30 @@
             introCanvas.width = container.offsetWidth;
             introCanvas.height = container.offsetHeight;
 
+            // Update CSS custom properties for responsive scaling
+            document.documentElement.style.setProperty('--container-width', container.offsetWidth + 'px');
+            document.documentElement.style.setProperty('--container-height', container.offsetHeight + 'px');
+
             introCtx.clearRect(0, 0, introCanvas.width, introCanvas.height);
 
             if (spritesLoaded.remixetteFront && spritesLoaded.remixBoy && spritesLoaded.remixBoss) {
-                const spriteSize = 120;
+                // Scale sprite size relative to container size
+                const spriteSize = Math.min(container.offsetWidth, container.offsetHeight) * 0.15;
                 const canvasWidth = introCanvas.width;
                 const canvasHeight = introCanvas.height;
 
-                // Draw Remixette on the left
+                // Set up text styling
+                const fontSize = spriteSize * 0.15;
+                introCtx.font = `${fontSize}px 'Press Start 2P', monospace`;
+                introCtx.textAlign = 'center';
+                introCtx.textBaseline = 'middle';
+                introCtx.fillStyle = 'white';
+                introCtx.strokeStyle = 'black';
+                introCtx.lineWidth = 2;
+
+                // Draw Remixette on the left (moved 10% higher)
                 const remixetteX = canvasWidth * 0.2;
-                const remixetteY = canvasHeight * 0.6;
+                const remixetteY = canvasHeight * 0.5;
                 introCtx.drawImage(
                     remixetteFrontSprite,
                     remixetteX - spriteSize / 2,
@@ -373,32 +377,45 @@
                     spriteSize, spriteSize
                 );
 
-                // Draw RemixBoy lying down
-                const remixBoyX = canvasWidth * 0.65;
-                const remixBoyY = canvasHeight * 0.7;
+                // Label above Remixette
+                introCtx.strokeText('LVL 1 NEWBIE', remixetteX, remixetteY - spriteSize - fontSize);
+                introCtx.fillText('LVL 1 NEWBIE', remixetteX, remixetteY - spriteSize - fontSize);
+
+                // Draw RemixBoy lying down FIRST (behind RemixBoss)
+                const remixBoyX = canvasWidth * 0.66;
+                const remixBoyY = canvasHeight * 0.5; // Positioned to be under boss
                 introCtx.save();
                 introCtx.translate(remixBoyX, remixBoyY);
                 introCtx.rotate(Math.PI / 2);
                 introCtx.drawImage(
                     remixBoySprite,
                     -spriteSize / 2, -spriteSize / 2,
-                    spriteSize, spriteSize
+                    spriteSize * 0.9, spriteSize * 0.9
                 );
                 introCtx.restore();
 
-                // Draw RemixBoss flipped and scaled
-                const bossSize = spriteSize * 1.2;
-                const bossX = canvasWidth * 0.75;
-                const bossY = canvasHeight * 0.6;
+                // Label under RemixBoy
+                introCtx.strokeText('LVL 0', remixBoyX, remixBoyY + fontSize);
+                introCtx.fillText('LVL 0', remixBoyX, remixBoyY + fontSize);
+
+                // Draw RemixBoss AFTER (in front), angled and bigger
+                const bossSize = spriteSize * 1.6;
+                const bossX = canvasWidth * 0.7; // Slightly offset to show stepping
+                const bossY = canvasHeight * 0.5; // Higher up, foot on RemixBoy
                 introCtx.save();
                 introCtx.translate(bossX, bossY);
-                introCtx.scale(-1, 1);
+                introCtx.scale(-1, 1); // Flip horizontally
+                introCtx.rotate(- Math.PI / 12); // 15° rotation to the right
                 introCtx.drawImage(
                     remixBossSprite,
                     -bossSize / 2, -bossSize,
                     bossSize, bossSize
                 );
                 introCtx.restore();
+
+                // Label above RemixBoss
+                introCtx.strokeText('LVL 99 REMIX BOSS', bossX, bossY - bossSize - fontSize);
+                introCtx.fillText('LVL 99 REMIX BOSS', bossX, bossY - bossSize - fontSize);
             }
         }
 
@@ -1589,31 +1606,35 @@
                         timer: 2.0
                     });
 
-                    player.level++;
-                    player.gatesPassed++;
+                    // Only give level ups if no boss exists (before boss fight)
+                    if (!boss && !bossDeathAnimation) {
+                        player.level++;
+                        player.gatesPassed++;
 
-                    if (player.level > 100) {
-                        player.level = 100;
-                    }
+                        if (player.level > 100) {
+                            player.level = 100;
+                        }
 
-                    if (player.gatesPassed >= 100 && !boss) {
-                        boss = {
-                            x: 0,
-                            z: 1500,
-                            hp: 1000,
-                            maxHp: 1000,
-                            shootTimer: 0,
-                            // Add animation properties like enemies have
-                            flipTimer: 0,
-                            flipped: false,
-                            angleTimer: 0,
-                            angle: 0,
-                            angleDirection: 1,
-                            bobTimer: 0,
-                            bobOffset: 0
-                        };
-                        enemies = [];
+                        if (player.gatesPassed >= 100 && !boss) {
+                            boss = {
+                                x: 0,
+                                z: 1500,
+                                hp: 1000,
+                                maxHp: 1000,
+                                shootTimer: 0,
+                                // Add animation properties like enemies have
+                                flipTimer: 0,
+                                flipped: false,
+                                angleTimer: 0,
+                                angle: 0,
+                                angleDirection: 1,
+                                bobTimer: 0,
+                                bobOffset: 0
+                            };
+                            enemies = [];
+                        }
                     }
+                    // If boss exists, still give ammo but no level ups or gate progress
                 }
 
                 return gate.z > -500;
@@ -1687,7 +1708,8 @@
                 return projectile.z > -200;
             });
 
-            if (!boss) {
+            // Stop all spawning once boss death animation starts
+            if (!boss && !bossDeathAnimation) { // Only spawn enemies if no boss and no death animation
                 enemySpawnTimer -= dt;
                 if (enemySpawnTimer <= 0) {
                     enemies.push({
@@ -1708,7 +1730,7 @@
                 }
             }
 
-            if (!boss) {
+            if (!boss && !bossDeathAnimation) { // Only spawn coins if no boss and no death animation
                 coinSpawnTimer -= dt;
                 if (coinSpawnTimer <= 0) {
                     coins.push({
@@ -1723,29 +1745,33 @@
                 }
             }
 
-            gunSpawnTimer -= dt;
-            if (gunSpawnTimer <= 0 && !boss) {
-                gunPickups.push({
-                    x: (Math.random() - 0.5) * 1.5,
-                    z: 1800,
-                    dropY: 0,
-                    vy: 300,
-                    rotation: 0,
-                    landed: false
-                });
-                gunSpawnTimer = 60;
+            if (!bossDeathAnimation) { // Only spawn guns if no death animation
+                gunSpawnTimer -= dt;
+                if (gunSpawnTimer <= 0 && !boss) {
+                    gunPickups.push({
+                        x: (Math.random() - 0.5) * 1.5,
+                        z: 1800,
+                        dropY: 0,
+                        vy: 300,
+                        rotation: 0,
+                        landed: false
+                    });
+                    gunSpawnTimer = 60;
+                }
             }
 
-            gateSpawnTimer -= dt;
-            if (gateSpawnTimer <= 0) {
-                const problems = generateArithmeticGate();
-                gates.push({
-                    z: 1800,
-                    passed: false,
-                    leftProblem: problems[0],
-                    rightProblem: problems[1]
-                });
-                gateSpawnTimer = 4;
+            if (!bossDeathAnimation) { // Only spawn gates if no death animation
+                gateSpawnTimer -= dt;
+                if (gateSpawnTimer <= 0) {
+                    const problems = generateArithmeticGate();
+                    gates.push({
+                        z: 1800,
+                        passed: false,
+                        leftProblem: problems[0],
+                        rightProblem: problems[1]
+                    });
+                    gateSpawnTimer = 4;
+                }
             }
 
             player.hitFlash = Math.max(0, player.hitFlash - dt * 2);
@@ -1777,15 +1803,10 @@
                         bossDeathAnimation.scaleX = 1.0 + (growthProgress * 4.0);
                         bossDeathAnimation.scaleY = 1.0 + (growthProgress * 4.0);
                     } else {
-                        // Start squashing phase and score calculation
+                        // Start squashing phase but DON'T call showLevelMultiplier yet
                         bossDeathAnimation.phase = 'squashing';
                         bossDeathAnimation.scaleX = 5.0;
                         bossDeathAnimation.scaleY = 5.0;
-
-                        if (!bossDeathAnimation.scoreCalculated) {
-                            bossDeathAnimation.scoreCalculated = true;
-                            showLevelMultiplier(); // Start score count NOW
-                        }
                     }
                 } else if (bossDeathAnimation.phase === 'squashing') {
                     const squashTime = bossDeathAnimation.timer - bossDeathAnimation.growthDuration;
@@ -1794,6 +1815,12 @@
                     // Much more dramatic pancaking effect over 4 seconds
                     bossDeathAnimation.scaleX = 5.0 + (squashProgress * 8.0); // Gets much wider
                     bossDeathAnimation.scaleY = 5.0 * Math.max(0.01, 1 - squashProgress * 0.99); // Gets extremely flat
+
+                    // Call showLevelMultiplier when squashing is about 20% done
+                    if (!bossDeathAnimation.scoreCalculated && squashProgress > 0.2) {
+                        bossDeathAnimation.scoreCalculated = true;
+                        showLevelMultiplier(); // Start score count during squashing
+                    }
                 }
 
                 const totalProgress = bossDeathAnimation.timer / bossDeathAnimation.totalDuration;
@@ -1870,24 +1897,24 @@
         let lastTime = 0;
 
         function showLevelMultiplier() {
-            gameRunning = false;
+            // DON'T set gameRunning = false yet - let boss animation continue
             const finalLevel = player.level;
             const baseScore = player.score;
 
             const levelDisplay = document.createElement('div');
             levelDisplay.textContent = `LVL ${finalLevel}`;
             levelDisplay.style.cssText = `
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translateX(-50%) translateY(-50%);
-        font-family: 'Press Start 2P', monospace;
-        font-size: 64px;
-        color: #ffff00;
-        text-shadow: 3px 3px 0 #000;
-        z-index: 2000;
-        pointer-events: none;
-    `;
+                position: fixed;
+                left: 50%;
+                top: 50%;
+                transform: translateX(-50%) translateY(-50%);
+                font-family: 'Press Start 2P', monospace;
+                font-size: 64px;
+                color: #ffff00;
+                text-shadow: 3px 3px 0 #000;
+                z-index: 2000;
+                pointer-events: none;
+            `;
             document.body.appendChild(levelDisplay);
 
             setTimeout(() => {
@@ -1915,8 +1942,9 @@
                     if (progress < 1) {
                         requestAnimationFrame(animateScore);
                     } else {
-                        // Wait a bit longer to let the pancaking finish
+                        // Now stop the game and finish up
                         setTimeout(() => {
+                            gameRunning = false; // Stop game loop AFTER animation is done
                             document.body.removeChild(levelDisplay);
                             if (window.FarcadeSDK) {
                                 window.FarcadeSDK.singlePlayer.actions.gameOver({ score: targetScore });
@@ -1931,6 +1959,7 @@
                 animateScore();
             }, 2000);
         }
+
         function startGame() {
             document.getElementById('introScreen').style.display = 'none';
 
