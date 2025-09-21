@@ -1655,7 +1655,7 @@
                         isRightChoice = gate.leftProblem.value >= gate.rightProblem.value;
                     } else {
                         ammoGained = gate.rightProblem.value;
-                        isRightChoice = gate.rightProblem.value >= gate.rightProblem.value;
+                        isRightChoice = gate.rightProblem.value >= gate.leftProblem.value;
                     }
 
                     player.ammo += ammoGained;
@@ -2029,6 +2029,9 @@
                     if (progress < 1) {
                         requestAnimationFrame(animateScore);
                     } else {
+                        // Update player.score to prevent game loop from overwriting the display
+                        player.score = targetScore;
+
                         // Now stop the game and finish up
                         setTimeout(() => {
                             gameRunning = false; // Stop game loop AFTER animation is done
