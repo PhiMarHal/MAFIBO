@@ -250,6 +250,22 @@
         let gameTime = 0;
         let tunnelOffset = 0;
         let backgroundOffset = 0;
+        let bossEncountered = false; // Prevent spawning after boss fight
+
+        // Intro dialogue system
+        let introDialogue = {
+            lines: [
+                "This Remix App ain't big enough",
+                "for the both of us..."
+            ],
+            currentLineIndex: 0,
+            currentCharIndex: 0,
+            timer: 0,
+            charDelay: 80, // milliseconds between characters
+            lineDelay: 500, // pause between lines
+            isComplete: false,
+            waitingForNextLine: false
+        };
 
         // Player
         let player = {
@@ -394,9 +410,9 @@
                 );
                 introCtx.restore();
 
-                // Label under RemixBoy
-                introCtx.strokeText('LVL 0', remixBoyX, remixBoyY + fontSize);
-                introCtx.fillText('LVL 0', remixBoyX, remixBoyY + fontSize);
+                // Label under RemixBoy (adjusted for his rotated position)
+                introCtx.strokeText('LVL 0', remixBoyX, remixBoyY + spriteSize * 0.6);
+                introCtx.fillText('LVL 0', remixBoyX, remixBoyY + spriteSize * 0.6);
 
                 // Draw RemixBoss AFTER (in front), angled and bigger
                 const bossSize = spriteSize * 1.6;
@@ -416,6 +432,76 @@
                 // Label above RemixBoss
                 introCtx.strokeText('LVL 99 REMIX BOSS', bossX, bossY - bossSize - fontSize);
                 introCtx.fillText('LVL 99 REMIX BOSS', bossX, bossY - bossSize - fontSize);
+
+                // Draw RPG dialogue text (two lines)
+                const dialogueY = canvasHeight * 0.75; // Between characters and play button
+                const dialogueFontSize = fontSize * 1.4; // Increased by 40%
+                const lineHeight = dialogueFontSize * 1.2;
+                introCtx.font = `${dialogueFontSize}px 'Press Start 2P', monospace`;
+
+                // Draw first line
+                if (introDialogue.currentLineIndex >= 0) {
+                    const line1Text = introDialogue.lines[0].substring(0,
+                        introDialogue.currentLineIndex === 0 ? introDialogue.currentCharIndex : introDialogue.lines[0].length);
+                    if (line1Text.length > 0) {
+                        introCtx.strokeText(line1Text, canvasWidth * 0.5, dialogueY - lineHeight / 2);
+                        introCtx.fillText(line1Text, canvasWidth * 0.5, dialogueY - lineHeight / 2);
+                    }
+                }
+
+                // Draw second line
+                if (introDialogue.currentLineIndex >= 1) {
+                    const line2Text = introDialogue.lines[1].substring(0,
+                        introDialogue.currentLineIndex === 1 ? introDialogue.currentCharIndex : introDialogue.lines[1].length);
+                    if (line2Text.length > 0) {
+                        introCtx.strokeText(line2Text, canvasWidth * 0.5, dialogueY + lineHeight / 2);
+                        introCtx.fillText(line2Text, canvasWidth * 0.5, dialogueY + lineHeight / 2);
+                    }
+                }
+            }
+
+            // Start dialogue animation if not already started
+            if (!introDialogue.isComplete && introDialogue.currentLineIndex === 0 && introDialogue.currentCharIndex === 0) {
+                updateIntroDialogue();
+            }
+        }
+
+        function updateIntroDialogue() {
+            if (introDialogue.isComplete) return;
+
+            const now = Date.now();
+
+            if (introDialogue.waitingForNextLine) {
+                if (now - introDialogue.timer >= introDialogue.lineDelay) {
+                    introDialogue.waitingForNextLine = false;
+                    introDialogue.currentLineIndex++;
+                    introDialogue.currentCharIndex = 0;
+                    introDialogue.timer = now;
+                    setTimeout(updateIntroDialogue, introDialogue.charDelay);
+                }
+                return;
+            }
+
+            if (now - introDialogue.timer >= introDialogue.charDelay) {
+                const currentLine = introDialogue.lines[introDialogue.currentLineIndex];
+
+                if (introDialogue.currentCharIndex < currentLine.length) {
+                    introDialogue.currentCharIndex++;
+                    introDialogue.timer = now;
+                    drawIntroScene(); // Redraw with new character
+                    setTimeout(updateIntroDialogue, introDialogue.charDelay);
+                } else {
+                    // Finished current line
+                    if (introDialogue.currentLineIndex < introDialogue.lines.length - 1) {
+                        // Move to next line after delay
+                        introDialogue.waitingForNextLine = true;
+                        introDialogue.timer = now;
+                        setTimeout(updateIntroDialogue, introDialogue.lineDelay);
+                    } else {
+                        // All lines complete
+                        introDialogue.isComplete = true;
+                    }
+                }
             }
         }
 
@@ -1632,6 +1718,7 @@
                                 bobOffset: 0
                             };
                             enemies = [];
+                            bossEncountered = true; // Set permanent flag
                         }
                     }
                     // If boss exists, still give ammo but no level ups or gate progress
@@ -1708,8 +1795,8 @@
                 return projectile.z > -200;
             });
 
-            // Stop all spawning once boss death animation starts
-            if (!boss && !bossDeathAnimation) { // Only spawn enemies if no boss and no death animation
+            // Stop all spawning once boss has been encountered
+            if (!bossEncountered) { // Only spawn enemies if boss has never been encountered
                 enemySpawnTimer -= dt;
                 if (enemySpawnTimer <= 0) {
                     enemies.push({
@@ -1730,7 +1817,7 @@
                 }
             }
 
-            if (!boss && !bossDeathAnimation) { // Only spawn coins if no boss and no death animation
+            if (!bossEncountered) { // Only spawn coins if boss has never been encountered
                 coinSpawnTimer -= dt;
                 if (coinSpawnTimer <= 0) {
                     coins.push({
@@ -1745,9 +1832,9 @@
                 }
             }
 
-            if (!bossDeathAnimation) { // Only spawn guns if no death animation
+            if (!bossEncountered) { // Only spawn guns if boss has never been encountered
                 gunSpawnTimer -= dt;
-                if (gunSpawnTimer <= 0 && !boss) {
+                if (gunSpawnTimer <= 0) {
                     gunPickups.push({
                         x: (Math.random() - 0.5) * 1.5,
                         z: 1800,
