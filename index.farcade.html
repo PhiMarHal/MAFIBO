@@ -25,8 +25,10 @@
         }
 
         #gameContainer {
-            width: min(min(90vw, 60vh), 800px);
-            height: min(min(135vw, 90vh), 1200px);
+            width: min(100vw, 66.67vh);
+            /* Use full width, or height*(2/3) if screen is wide */
+            height: min(100vh, 150vw);
+            /* Use full height, or width*(3/2) if screen is tall */
             position: relative;
             background: #000;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -54,46 +56,51 @@
         }
 
         #introScreen h1 {
-            font-size: 96px;
+            font-size: calc(var(--container-width, 800px) * 0.12);
             color: white;
             text-shadow: 6px 6px 0 #000;
-            margin-bottom: 50px;
-            margin-top: -150px;
+            margin-bottom: 0;
+            margin-top: 0;
             animation: pulse 2s infinite;
             z-index: 1002;
-            position: relative;
+            position: absolute;
+            top: 8%;
+            left: 50%;
+            transform: translateX(-50%);
         }
 
         @keyframes pulse {
 
             0%,
             100% {
-                transform: scale(1);
+                transform: translateX(-50%) scale(1);
             }
 
             50% {
-                transform: scale(1.05);
+                transform: translateX(-50%) scale(1.05);
             }
         }
 
         #playButton {
             background: #ff6b6b;
             border: none;
-            padding: 40px 80px;
-            font-size: 32px;
+            padding: calc(var(--container-height, 1200px) * 0.025) calc(var(--container-width, 800px) * 0.08);
+            font-size: calc(var(--container-width, 800px) * 0.04);
             color: white;
             font-family: 'Press Start 2P', monospace;
             cursor: pointer;
-            box-shadow: 0 10px 0 #c44444;
+            box-shadow: 0 calc(var(--container-height, 1200px) * 0.008) 0 #c44444;
             transition: all 0.1s;
             z-index: 1002;
-            position: relative;
-            margin-top: 150px;
+            position: absolute;
+            bottom: 8%;
+            left: 50%;
+            transform: translateX(-50%);
         }
 
         #playButton:hover {
-            transform: translateY(4px);
-            box-shadow: 0 6px 0 #c44444;
+            transform: translateX(-50%) translateY(calc(var(--container-height, 1200px) * 0.003));
+            box-shadow: 0 calc(var(--container-height, 1200px) * 0.005) 0 #c44444;
         }
 
         #gameCanvas {
@@ -174,16 +181,6 @@
         }
 
         @media (max-width: 900px) {
-            #introScreen h1 {
-                font-size: 64px;
-                margin-bottom: 60px;
-            }
-
-            #playButton {
-                padding: 25px 50px;
-                font-size: 20px;
-            }
-
             #score {
                 font-size: 32px;
                 top: 15px;
@@ -196,16 +193,6 @@
         }
 
         @media (max-width: 600px) {
-            #introScreen h1 {
-                font-size: 48px;
-                margin-bottom: 40px;
-            }
-
-            #playButton {
-                padding: 20px 40px;
-                font-size: 16px;
-            }
-
             #score {
                 font-size: 24px;
                 top: 10px;
@@ -247,7 +234,10 @@
         }
 
         resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawIntroScene(); // Update intro scene scaling on resize
+        });
 
         // Constants for perspective
         const HORIZON_Y = 400;
@@ -261,6 +251,22 @@
         let gameTime = 0;
         let tunnelOffset = 0;
         let backgroundOffset = 0;
+        let bossEncountered = false; // Prevent spawning after boss fight
+
+        // Intro dialogue system
+        let introDialogue = {
+            lines: [
+                "This Remix App ain't big enough",
+                "for the both of us..."
+            ],
+            currentLineIndex: 0,
+            currentCharIndex: 0,
+            timer: 0,
+            charDelay: 80, // milliseconds between characters
+            lineDelay: 500, // pause between lines
+            isComplete: false,
+            waitingForNextLine: false
+        };
 
         // Player
         let player = {
@@ -295,7 +301,7 @@
         let ammoDisplays = [];
         let enemySparks = [];
         let enemyDeathSprites = [];
-        let playerHitSparks = []; // New: player hit impact sparks
+        let playerHitSparks = [];
 
         // Background image
         let backgroundImage = new Image();
@@ -316,13 +322,19 @@
         remixBossSprite.src = BASE_URL + 'assets/remixboss.png';
         let remixBoySprite = new Image();
         remixBoySprite.src = BASE_URL + 'assets/remixboy.png';
+        let gunHeldSprite = new Image();
+        gunHeldSprite.src = BASE_URL + 'assets/gun_held.png';
+        let gunPickupSprite = new Image();
+        gunPickupSprite.src = BASE_URL + 'assets/gun_pickup.png';
 
         let spritesLoaded = {
             remixetteBack: false,
             remixetteFront: false,
             remixBot: false,
             remixBoss: false,
-            remixBoy: false
+            remixBoy: false,
+            gunHeld: false,
+            gunPickup: false
         };
 
         remixetteBackSprite.onload = () => spritesLoaded.remixetteBack = true;
@@ -339,6 +351,8 @@
             spritesLoaded.remixBoy = true;
             drawIntroScene();
         };
+        gunHeldSprite.onload = () => spritesLoaded.gunHeld = true;
+        gunPickupSprite.onload = () => spritesLoaded.gunPickup = true;
 
         function drawIntroScene() {
             const introCanvas = document.getElementById('introCanvas');
@@ -349,16 +363,30 @@
             introCanvas.width = container.offsetWidth;
             introCanvas.height = container.offsetHeight;
 
+            // Update CSS custom properties for responsive scaling
+            document.documentElement.style.setProperty('--container-width', container.offsetWidth + 'px');
+            document.documentElement.style.setProperty('--container-height', container.offsetHeight + 'px');
+
             introCtx.clearRect(0, 0, introCanvas.width, introCanvas.height);
 
             if (spritesLoaded.remixetteFront && spritesLoaded.remixBoy && spritesLoaded.remixBoss) {
-                const spriteSize = 120;
+                // Scale sprite size relative to container size
+                const spriteSize = Math.min(container.offsetWidth, container.offsetHeight) * 0.15;
                 const canvasWidth = introCanvas.width;
                 const canvasHeight = introCanvas.height;
 
-                // Draw Remixette on the left
+                // Set up text styling
+                const fontSize = spriteSize * 0.15;
+                introCtx.font = `${fontSize}px 'Press Start 2P', monospace`;
+                introCtx.textAlign = 'center';
+                introCtx.textBaseline = 'middle';
+                introCtx.fillStyle = 'white';
+                introCtx.strokeStyle = 'black';
+                introCtx.lineWidth = 2;
+
+                // Draw Remixette on the left (moved 10% higher)
                 const remixetteX = canvasWidth * 0.2;
-                const remixetteY = canvasHeight * 0.6;
+                const remixetteY = canvasHeight * 0.5;
                 introCtx.drawImage(
                     remixetteFrontSprite,
                     remixetteX - spriteSize / 2,
@@ -366,32 +394,115 @@
                     spriteSize, spriteSize
                 );
 
-                // Draw RemixBoy lying down
-                const remixBoyX = canvasWidth * 0.65;
-                const remixBoyY = canvasHeight * 0.7;
+                // Label above Remixette
+                introCtx.strokeText('LVL 1 NEWBIE', remixetteX, remixetteY - spriteSize - fontSize);
+                introCtx.fillText('LVL 1 NEWBIE', remixetteX, remixetteY - spriteSize - fontSize);
+
+                // Draw RemixBoy lying down FIRST (behind RemixBoss)
+                const remixBoyX = canvasWidth * 0.66;
+                const remixBoyY = canvasHeight * 0.5; // Positioned to be under boss
                 introCtx.save();
                 introCtx.translate(remixBoyX, remixBoyY);
                 introCtx.rotate(Math.PI / 2);
                 introCtx.drawImage(
                     remixBoySprite,
                     -spriteSize / 2, -spriteSize / 2,
-                    spriteSize, spriteSize
+                    spriteSize * 0.9, spriteSize * 0.9
                 );
                 introCtx.restore();
 
-                // Draw RemixBoss flipped and scaled
-                const bossSize = spriteSize * 1.2;
-                const bossX = canvasWidth * 0.75;
-                const bossY = canvasHeight * 0.6;
+                // Label under RemixBoy (adjusted for his rotated position)
+                introCtx.strokeText('LVL 0', remixBoyX, remixBoyY + spriteSize * 0.6);
+                introCtx.fillText('LVL 0', remixBoyX, remixBoyY + spriteSize * 0.6);
+
+                // Draw RemixBoss AFTER (in front), angled and bigger
+                const bossSize = spriteSize * 1.6;
+                const bossX = canvasWidth * 0.7; // Slightly offset to show stepping
+                const bossY = canvasHeight * 0.5; // Higher up, foot on RemixBoy
                 introCtx.save();
                 introCtx.translate(bossX, bossY);
-                introCtx.scale(-1, 1);
+                introCtx.scale(-1, 1); // Flip horizontally
+                introCtx.rotate(- Math.PI / 12); // 15° rotation to the right
                 introCtx.drawImage(
                     remixBossSprite,
                     -bossSize / 2, -bossSize,
                     bossSize, bossSize
                 );
                 introCtx.restore();
+
+                // Label above RemixBoss
+                introCtx.strokeText('LVL 99 REMIX BOSS', bossX, bossY - bossSize - fontSize);
+                introCtx.fillText('LVL 99 REMIX BOSS', bossX, bossY - bossSize - fontSize);
+
+                // Draw RPG dialogue text (two lines)
+                const dialogueY = canvasHeight * 0.75; // Between characters and play button
+                const dialogueFontSize = fontSize * 1.4; // Increased by 40%
+                const lineHeight = dialogueFontSize * 1.2;
+                introCtx.font = `${dialogueFontSize}px 'Press Start 2P', monospace`;
+
+                // Draw first line
+                if (introDialogue.currentLineIndex >= 0) {
+                    const line1Text = introDialogue.lines[0].substring(0,
+                        introDialogue.currentLineIndex === 0 ? introDialogue.currentCharIndex : introDialogue.lines[0].length);
+                    if (line1Text.length > 0) {
+                        introCtx.strokeText(line1Text, canvasWidth * 0.5, dialogueY - lineHeight / 2);
+                        introCtx.fillText(line1Text, canvasWidth * 0.5, dialogueY - lineHeight / 2);
+                    }
+                }
+
+                // Draw second line
+                if (introDialogue.currentLineIndex >= 1) {
+                    const line2Text = introDialogue.lines[1].substring(0,
+                        introDialogue.currentLineIndex === 1 ? introDialogue.currentCharIndex : introDialogue.lines[1].length);
+                    if (line2Text.length > 0) {
+                        introCtx.strokeText(line2Text, canvasWidth * 0.5, dialogueY + lineHeight / 2);
+                        introCtx.fillText(line2Text, canvasWidth * 0.5, dialogueY + lineHeight / 2);
+                    }
+                }
+            }
+
+            // Start dialogue animation if not already started
+            if (!introDialogue.isComplete && introDialogue.currentLineIndex === 0 && introDialogue.currentCharIndex === 0) {
+                updateIntroDialogue();
+            }
+        }
+
+        function updateIntroDialogue() {
+            if (introDialogue.isComplete) return;
+
+            const now = Date.now();
+
+            if (introDialogue.waitingForNextLine) {
+                if (now - introDialogue.timer >= introDialogue.lineDelay) {
+                    introDialogue.waitingForNextLine = false;
+                    introDialogue.currentLineIndex++;
+                    introDialogue.currentCharIndex = 0;
+                    introDialogue.timer = now;
+                    setTimeout(updateIntroDialogue, introDialogue.charDelay);
+                }
+                return;
+            }
+
+            if (now - introDialogue.timer >= introDialogue.charDelay) {
+                const currentLine = introDialogue.lines[introDialogue.currentLineIndex];
+
+                if (introDialogue.currentCharIndex < currentLine.length) {
+                    introDialogue.currentCharIndex++;
+                    introDialogue.timer = now;
+                    drawIntroScene(); // Redraw with new character
+                    setTimeout(updateIntroDialogue, introDialogue.charDelay);
+                } else {
+                    // Finished current line
+                    if (introDialogue.currentLineIndex < introDialogue.lines.length - 1) {
+                        // Move to next line after delay
+                        introDialogue.waitingForNextLine = true;
+                        introDialogue.timer = now;
+                        setTimeout(updateIntroDialogue, introDialogue.lineDelay);
+                    } else {
+                        // All lines complete
+                        introDialogue.isComplete = true;
+                    }
+                }
             }
         }
 
@@ -702,25 +813,38 @@
         function drawGunPickup(gunPickup) {
             const pos = project3D(gunPickup.x, 0, gunPickup.z);
             if (pos.scale > 0.05 && gunPickup.z > 0 && gunPickup.z < 2000) {
-                const size = 50 * pos.scale;
                 const tunnelFloorY = pos.y;
                 const screenY = Math.min(gunPickup.dropY, tunnelFloorY);
+
+                // Use sprite dimensions: 256x192
+                const baseWidth = 256;
+                const baseHeight = 192;
+                const scale = pos.scale * 0.5; // Adjust this multiplier to get the right size
+                const spriteWidth = baseWidth * scale;
+                const spriteHeight = baseHeight * scale;
 
                 ctx.save();
                 ctx.translate(pos.x, screenY);
                 ctx.rotate(gunPickup.rotation);
 
-                ctx.fillStyle = '#444444';
-                ctx.fillRect(-size * 1.2, -size * 0.3, size * 2.4, size * 0.6);
-
-                ctx.fillStyle = '#666666';
-                ctx.fillRect(size * 0.8, -size * 0.2, size * 0.8, size * 0.4);
-
-                ctx.fillStyle = '#333333';
-                ctx.fillRect(-size * 0.4, -size * 0.3, size * 0.8, size * 1.2);
-
-                ctx.fillStyle = '#888888';
-                ctx.fillRect(-size * 1.1, -size * 0.2, size * 2.2, size * 0.2);
+                if (spritesLoaded.gunPickup) {
+                    ctx.drawImage(
+                        gunPickupSprite,
+                        -spriteWidth / 2, -spriteHeight / 2,
+                        spriteWidth, spriteHeight
+                    );
+                } else {
+                    // Fallback to old programmatic rendering if sprite not loaded
+                    const size = 50 * pos.scale;
+                    ctx.fillStyle = '#444444';
+                    ctx.fillRect(-size * 1.2, -size * 0.3, size * 2.4, size * 0.6);
+                    ctx.fillStyle = '#666666';
+                    ctx.fillRect(size * 0.8, -size * 0.2, size * 0.8, size * 0.4);
+                    ctx.fillStyle = '#333333';
+                    ctx.fillRect(-size * 0.4, -size * 0.3, size * 0.8, size * 1.2);
+                    ctx.fillStyle = '#888888';
+                    ctx.fillRect(-size * 1.1, -size * 0.2, size * 2.2, size * 0.2);
+                }
 
                 ctx.restore();
             }
@@ -993,35 +1117,6 @@
             }
         }
 
-        function createBossHitSparks(x, y, scale) {
-            const numSparks = Math.max(4, Math.floor(8 * scale)); // Scale number of sparks
-            const sparkSpeed = 800 * scale; // Scale speed
-
-            for (let i = 0; i < numSparks; i++) {
-                const angle = (Math.PI * 2 * i) / numSparks + Math.random() * 0.6 - 0.3;
-                const speed = sparkSpeed + Math.random() * (400 * scale);
-
-                const spark = {
-                    x: x,
-                    y: y,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed,
-                    width: Math.max(8, 20 * scale) + Math.random() * (20 * scale),
-                    height: Math.max(3, 6 * scale),
-                    alpha: 1,
-                    timer: 0,
-                    movementTime: 120 + Math.random() * 80,
-                    fadeTime: 150,
-                    totalLife: 0,
-                    isMoving: true,
-                    rotation: angle
-                };
-
-                spark.totalLife = spark.movementTime + spark.fadeTime;
-                playerHitSparks.push(spark); // Reuse the same array and drawing function
-            }
-        }
-
         function drawBossDeathAnimation() {
             if (!bossDeathAnimation) return;
 
@@ -1124,6 +1219,36 @@
             enemyDeathSprites.push(deathSprite);
         }
 
+        function createBossHitSparks(x, y, scale) {
+            const numSparks = Math.max(4, Math.floor(8 * scale)); // Scale number of sparks
+            const sparkSpeed = 800 * scale; // Scale speed
+
+            for (let i = 0; i < numSparks; i++) {
+                const angle = (Math.PI * 2 * i) / numSparks + Math.random() * 0.6 - 0.3;
+                const speed = sparkSpeed + Math.random() * (400 * scale);
+
+                const spark = {
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    width: Math.max(8, 20 * scale) + Math.random() * (20 * scale),
+                    height: Math.max(3, 6 * scale),
+                    alpha: 1,
+                    timer: 0,
+                    movementTime: 120 + Math.random() * 80,
+                    fadeTime: 150,
+                    totalLife: 0,
+                    isMoving: true,
+                    rotation: angle
+                };
+
+                spark.totalLife = spark.movementTime + spark.fadeTime;
+                playerHitSparks.push(spark); // Reuse the same array and drawing function
+            }
+        }
+
+
         function updateEnemyDeathEffects(dt) {
             enemySparks = enemySparks.filter(spark => {
                 spark.timer += dt * 1000;
@@ -1176,6 +1301,78 @@
 
             const size = 96;
 
+            // Helper function to draw a single gun
+            function drawGun(gunIndex, gunX, gunY) {
+                if (spritesLoaded.gunHeld && gunHeldSprite.complete) {
+                    const gunSpriteSize = 80;
+
+                    ctx.save();
+                    ctx.translate(gunX, gunY);
+
+                    if (player.flipped) {
+                        ctx.scale(-1, 1);
+                    }
+
+                    ctx.drawImage(
+                        gunHeldSprite,
+                        -gunSpriteSize / 2, -gunSpriteSize / 2,
+                        gunSpriteSize, gunSpriteSize
+                    );
+
+                    ctx.restore();
+                } else {
+                    // Fallback - bright yellow for debugging
+                    ctx.fillStyle = '#ffff00';
+                    ctx.fillRect(gunX - 6, gunY - 30, 12, 60);
+                }
+            }
+
+            // Calculate gun positions first
+            let gunPositions = [];
+            for (let i = 0; i < player.guns; i++) {
+                let gunX;
+
+                if (i === 0) {
+                    // First gun: left hand position
+                    gunX = x - 45;
+                } else if (i === 1) {
+                    // Second gun: right hand position  
+                    gunX = x + 45;
+                } else {
+                    // Additional guns stack outward alternating left/right
+                    const extraGuns = i - 2;
+                    const stackSide = extraGuns % 2;
+                    const stackLevel = Math.floor(extraGuns / 2) + 1;
+
+                    if (stackSide === 0) {
+                        // Stack on left side
+                        gunX = x - 45 - (stackLevel * 30);
+                    } else {
+                        // Stack on right side
+                        gunX = x + 45 + (stackLevel * 30);
+                    }
+                }
+
+                gunPositions.push({
+                    index: i,
+                    x: gunX,
+                    y: y - 50,
+                    isOnLeftSide: gunX < x
+                });
+            }
+
+            // Phase 1: Draw guns that should be behind Remixette (sorted by distance from center)
+            let backGuns = gunPositions.filter(gun => {
+                const shouldBeInFront = player.flipped ? !gun.isOnLeftSide : gun.isOnLeftSide;
+                return !shouldBeInFront;
+            });
+            // Sort back guns: furthest from center drawn first (back to front)
+            backGuns.sort((a, b) => Math.abs(b.x - x) - Math.abs(a.x - x));
+            for (let gun of backGuns) {
+                drawGun(gun.index, gun.x, gun.y);
+            }
+
+            // Phase 2: Draw Remixette
             ctx.save();
             ctx.translate(x, y - size / 2);
 
@@ -1194,15 +1391,21 @@
 
             ctx.restore();
 
+            // Draw level text
             ctx.fillStyle = 'white';
             ctx.font = '20px "Press Start 2P", monospace';
             ctx.textAlign = 'center';
             ctx.fillText(`LVL ${player.level} ${getRank(player.level)}`, x, y - 130);
 
-            ctx.fillStyle = '#444';
-            for (let i = 0; i < player.guns; i++) {
-                const gunX = x + (i - (player.guns - 1) / 2) * 30;
-                ctx.fillRect(gunX - 4, y - 50, 8, 40);
+            // Phase 3: Draw guns that should be in front of Remixette (sorted by distance from center)
+            let frontGuns = gunPositions.filter(gun => {
+                const shouldBeInFront = player.flipped ? !gun.isOnLeftSide : gun.isOnLeftSide;
+                return shouldBeInFront;
+            });
+            // Sort front guns: furthest from center drawn first (back to front)
+            frontGuns.sort((a, b) => Math.abs(b.x - x) - Math.abs(a.x - x));
+            for (let gun of frontGuns) {
+                drawGun(gun.index, gun.x, gun.y);
             }
         }
 
@@ -1323,12 +1526,11 @@
                             scaleY: 1.0,
                             timer: 0,
                             growthDuration: 1000, // 1 second for growth
-                            squashDuration: 4000, // 4 seconds for dramatic squashing
-                            totalDuration: 5000,
+                            squashDuration: 4000, // 4 seconds for squashing
+                            totalDuration: 5000, // Total 5 seconds
                             scoreCalculated: false
                         };
                         boss = null;
-                        // Start score calculation immediately when squashing begins
                     }
                     return false;
                 }
@@ -1454,7 +1656,7 @@
                         isRightChoice = gate.leftProblem.value >= gate.rightProblem.value;
                     } else {
                         ammoGained = gate.rightProblem.value;
-                        isRightChoice = gate.rightProblem.value >= gate.rightProblem.value;
+                        isRightChoice = gate.rightProblem.value >= gate.leftProblem.value;
                     }
 
                     player.ammo += ammoGained;
@@ -1491,31 +1693,36 @@
                         timer: 2.0
                     });
 
-                    player.level++;
-                    player.gatesPassed++;
+                    // Only give level ups if no boss exists (before boss fight)
+                    if (!boss && !bossDeathAnimation) {
+                        player.level++;
+                        player.gatesPassed++;
 
-                    if (player.level > 100) {
-                        player.level = 100;
-                    }
+                        if (player.level > 100) {
+                            player.level = 100;
+                        }
 
-                    if (player.gatesPassed >= 100 && !boss) {
-                        boss = {
-                            x: 0,
-                            z: 1500,
-                            hp: 1000,
-                            maxHp: 1000,
-                            shootTimer: 0,
-                            // Add animation properties like enemies have
-                            flipTimer: 0,
-                            flipped: false,
-                            angleTimer: 0,
-                            angle: 0,
-                            angleDirection: 1,
-                            bobTimer: 0,
-                            bobOffset: 0
-                        };
-                        enemies = [];
+                        if (player.gatesPassed >= 100 && !boss) {
+                            boss = {
+                                x: 0,
+                                z: 1500,
+                                hp: 1000,
+                                maxHp: 1000,
+                                shootTimer: 0,
+                                // Add animation properties like enemies have
+                                flipTimer: 0,
+                                flipped: false,
+                                angleTimer: 0,
+                                angle: 0,
+                                angleDirection: 1,
+                                bobTimer: 0,
+                                bobOffset: 0
+                            };
+                            enemies = [];
+                            bossEncountered = true; // Set permanent flag
+                        }
                     }
+                    // If boss exists, still give ammo but no level ups or gate progress
                 }
 
                 return gate.z > -500;
@@ -1589,7 +1796,8 @@
                 return projectile.z > -200;
             });
 
-            if (!boss) {
+            // Stop all spawning once boss has been encountered
+            if (!bossEncountered) { // Only spawn enemies if boss has never been encountered
                 enemySpawnTimer -= dt;
                 if (enemySpawnTimer <= 0) {
                     enemies.push({
@@ -1610,7 +1818,7 @@
                 }
             }
 
-            if (!boss) {
+            if (!bossEncountered) { // Only spawn coins if boss has never been encountered
                 coinSpawnTimer -= dt;
                 if (coinSpawnTimer <= 0) {
                     coins.push({
@@ -1625,29 +1833,33 @@
                 }
             }
 
-            gunSpawnTimer -= dt;
-            if (gunSpawnTimer <= 0 && !boss) {
-                gunPickups.push({
-                    x: (Math.random() - 0.5) * 1.5,
-                    z: 1800,
-                    dropY: 0,
-                    vy: 300,
-                    rotation: 0,
-                    landed: false
-                });
-                gunSpawnTimer = 60;
+            if (!bossEncountered) { // Only spawn guns if boss has never been encountered
+                gunSpawnTimer -= dt;
+                if (gunSpawnTimer <= 0) {
+                    gunPickups.push({
+                        x: (Math.random() - 0.5) * 1.5,
+                        z: 1800,
+                        dropY: 0,
+                        vy: 300,
+                        rotation: 0,
+                        landed: false
+                    });
+                    gunSpawnTimer = 60;
+                }
             }
 
-            gateSpawnTimer -= dt;
-            if (gateSpawnTimer <= 0) {
-                const problems = generateArithmeticGate();
-                gates.push({
-                    z: 1800,
-                    passed: false,
-                    leftProblem: problems[0],
-                    rightProblem: problems[1]
-                });
-                gateSpawnTimer = 4;
+            if (!bossDeathAnimation) { // Only spawn gates if no death animation
+                gateSpawnTimer -= dt;
+                if (gateSpawnTimer <= 0) {
+                    const problems = generateArithmeticGate();
+                    gates.push({
+                        z: 1800,
+                        passed: false,
+                        leftProblem: problems[0],
+                        rightProblem: problems[1]
+                    });
+                    gateSpawnTimer = 4;
+                }
             }
 
             player.hitFlash = Math.max(0, player.hitFlash - dt * 2);
@@ -1672,7 +1884,6 @@
 
             if (bossDeathAnimation) {
                 bossDeathAnimation.timer += dt * 1000;
-                const progress = bossDeathAnimation.timer / bossDeathAnimation.totalDuration;
 
                 if (bossDeathAnimation.phase === 'growing') {
                     if (bossDeathAnimation.timer < bossDeathAnimation.growthDuration) {
@@ -1680,15 +1891,10 @@
                         bossDeathAnimation.scaleX = 1.0 + (growthProgress * 4.0);
                         bossDeathAnimation.scaleY = 1.0 + (growthProgress * 4.0);
                     } else {
-                        // Start squashing phase and score calculation
+                        // Start squashing phase but DON'T call showLevelMultiplier yet
                         bossDeathAnimation.phase = 'squashing';
                         bossDeathAnimation.scaleX = 5.0;
                         bossDeathAnimation.scaleY = 5.0;
-
-                        if (!bossDeathAnimation.scoreCalculated) {
-                            bossDeathAnimation.scoreCalculated = true;
-                            showLevelMultiplier(); // Start score count NOW
-                        }
                     }
                 } else if (bossDeathAnimation.phase === 'squashing') {
                     const squashTime = bossDeathAnimation.timer - bossDeathAnimation.growthDuration;
@@ -1697,9 +1903,16 @@
                     // Much more dramatic pancaking effect over 4 seconds
                     bossDeathAnimation.scaleX = 5.0 + (squashProgress * 8.0); // Gets much wider
                     bossDeathAnimation.scaleY = 5.0 * Math.max(0.01, 1 - squashProgress * 0.99); // Gets extremely flat
+
+                    // Call showLevelMultiplier when squashing is about 20% done
+                    if (!bossDeathAnimation.scoreCalculated && squashProgress > 0.2) {
+                        bossDeathAnimation.scoreCalculated = true;
+                        showLevelMultiplier(); // Start score count during squashing
+                    }
                 }
 
-                if (progress >= 1.0) {
+                const totalProgress = bossDeathAnimation.timer / bossDeathAnimation.totalDuration;
+                if (totalProgress >= 1.0) {
                     bossDeathAnimation = null;
                 }
             }
@@ -1772,24 +1985,24 @@
         let lastTime = 0;
 
         function showLevelMultiplier() {
-            gameRunning = false;
+            // DON'T set gameRunning = false yet - let boss animation continue
             const finalLevel = player.level;
             const baseScore = player.score;
 
             const levelDisplay = document.createElement('div');
             levelDisplay.textContent = `LVL ${finalLevel}`;
             levelDisplay.style.cssText = `
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translateX(-50%) translateY(-50%);
-        font-family: 'Press Start 2P', monospace;
-        font-size: 64px;
-        color: #ffff00;
-        text-shadow: 3px 3px 0 #000;
-        z-index: 2000;
-        pointer-events: none;
-    `;
+                position: fixed;
+                left: 50%;
+                top: 50%;
+                transform: translateX(-50%) translateY(-50%);
+                font-family: 'Press Start 2P', monospace;
+                font-size: 64px;
+                color: #ffff00;
+                text-shadow: 3px 3px 0 #000;
+                z-index: 2000;
+                pointer-events: none;
+            `;
             document.body.appendChild(levelDisplay);
 
             setTimeout(() => {
@@ -1817,8 +2030,12 @@
                     if (progress < 1) {
                         requestAnimationFrame(animateScore);
                     } else {
-                        // Wait a bit longer to let the pancaking finish
+                        // Update player.score to prevent game loop from overwriting the display
+                        player.score = targetScore;
+
+                        // Now stop the game and finish up
                         setTimeout(() => {
+                            gameRunning = false; // Stop game loop AFTER animation is done
                             document.body.removeChild(levelDisplay);
                             if (window.FarcadeSDK) {
                                 window.FarcadeSDK.singlePlayer.actions.gameOver({ score: targetScore });

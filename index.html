@@ -247,10 +247,33 @@
 
         // Game state
         let gameRunning = false;
+        let gamePaused = false; // New pause state for tutorial
         let gameTime = 0;
         let tunnelOffset = 0;
         let backgroundOffset = 0;
         let bossEncountered = false; // Prevent spawning after boss fight
+
+        // Tutorial system
+        let tutorial = {
+            active: false,
+            step: 0,
+            maxSteps: 8, // Increased for final tips tutorial
+            timer: 0,
+            stepStartTime: 0,
+            tutorialCompleted: false,
+            // Final tutorial state
+            finalTips: [
+                "get answer streaks to multiply coin bonus",
+                "levels are your lives",
+                "find more guns, shoot more bots",
+                "defeat the boss for a big score multiplier"
+            ],
+            currentTipIndex: 0,
+            tipTimer: 0,
+            showingLetsGo: false,
+            letsGoPhase: 0, // 0: show LET'S small, 1: grow LET'S, 2: show GO small, 3: grow GO, 4: done
+            letsGoTimer: 0
+        };
 
         // Intro dialogue system
         let introDialogue = {
@@ -421,7 +444,7 @@
                 introCtx.save();
                 introCtx.translate(bossX, bossY);
                 introCtx.scale(-1, 1); // Flip horizontally
-                introCtx.rotate(- Math.PI / 12); // 15° rotation to the right
+                introCtx.rotate(- Math.PI / 12); // 15Â° rotation to the right
                 introCtx.drawImage(
                     remixBossSprite,
                     -bossSize / 2, -bossSize,
@@ -503,6 +526,466 @@
                     }
                 }
             }
+        }
+
+        // Tutorial Functions
+        function startTutorial() {
+            tutorial.active = true;
+            tutorial.step = 0;
+            tutorial.timer = 0;
+            tutorial.stepStartTime = Date.now();
+        }
+
+        function updateTutorial(dt) {
+            if (!tutorial.active || tutorial.tutorialCompleted) return;
+
+            tutorial.timer += dt * 1000; // Convert to milliseconds
+
+            switch (tutorial.step) {
+                case 0:
+                    // Wait 1 second, then show movement tutorial
+                    if (tutorial.timer >= 1000) {
+                        pauseGame();
+                        tutorial.step = 1;
+                        tutorial.timer = 0;
+                    }
+                    break;
+
+                case 1:
+                    // Movement tutorial is active - waiting for player input
+                    break;
+
+                case 2:
+                    // Wait 1 second after movement tutorial, then show shooting tutorial
+                    if (tutorial.timer >= 1000) {
+                        pauseGame();
+                        tutorial.step = 3;
+                        tutorial.timer = 0;
+                    }
+                    break;
+
+                case 3:
+                    // Shooting tutorial is active - waiting for player input
+                    break;
+
+                case 4:
+                    // Wait 1 second after shooting tutorial, then show coin tutorial
+                    if (tutorial.timer >= 1000) {
+                        pauseGame();
+                        tutorial.step = 5;
+                        tutorial.timer = 0;
+                    }
+                    break;
+
+                case 5:
+                    // Coin tutorial is active - auto-advance after 4 seconds or player input
+                    if (tutorial.timer >= 4000) {
+                        completeTutorialStep();
+                    }
+                    break;
+
+                case 6:
+                    // Wait 3 seconds after coin tutorial, then show gate tutorial
+                    if (tutorial.timer >= 3000) {
+                        pauseGame();
+                        tutorial.step = 7;
+                        tutorial.timer = 0;
+                    }
+                    break;
+
+                case 7:
+                    // Gate tutorial is active - auto-advance after 4 seconds or player input
+                    if (tutorial.timer >= 4000) {
+                        completeTutorialStep();
+                    }
+                    break;
+
+                case 8:
+                    // Wait 3 seconds after gate tutorial, then show final tips tutorial
+                    if (tutorial.timer >= 3000) {
+                        pauseGame();
+                        tutorial.step = 9;
+                        tutorial.timer = 0;
+                        tutorial.tipTimer = 0;
+                        tutorial.currentTipIndex = 0;
+                        tutorial.showingLetsGo = false;
+                        tutorial.letsGoPhase = 0;
+                        tutorial.letsGoTimer = 0;
+                    }
+                    break;
+
+                case 9:
+                    // Final tips tutorial
+                    if (!tutorial.showingLetsGo) {
+                        tutorial.tipTimer += dt * 1000;
+                        // Show each tip every 500ms
+                        if (tutorial.tipTimer >= 500 && tutorial.currentTipIndex < tutorial.finalTips.length) {
+                            tutorial.currentTipIndex++;
+                            tutorial.tipTimer = 0;
+                        }
+                        // After all tips shown, wait 1 second then start LET'S GO
+                        if (tutorial.currentTipIndex >= tutorial.finalTips.length && tutorial.tipTimer >= 1000) {
+                            tutorial.showingLetsGo = true;
+                            tutorial.letsGoTimer = 0;
+                        }
+                    } else {
+                        // Handle LET'S GO animation
+                        tutorial.letsGoTimer += dt * 1000;
+                        switch (tutorial.letsGoPhase) {
+                            case 0: // Show LET'S small
+                                if (tutorial.letsGoTimer >= 200) {
+                                    tutorial.letsGoPhase = 1;
+                                    tutorial.letsGoTimer = 0;
+                                }
+                                break;
+                            case 1: // Grow LET'S
+                                if (tutorial.letsGoTimer >= 300) {
+                                    tutorial.letsGoPhase = 2;
+                                    tutorial.letsGoTimer = 0;
+                                }
+                                break;
+                            case 2: // Show GO small
+                                if (tutorial.letsGoTimer >= 200) {
+                                    tutorial.letsGoPhase = 3;
+                                    tutorial.letsGoTimer = 0;
+                                }
+                                break;
+                            case 3: // Grow GO
+                                if (tutorial.letsGoTimer >= 300) {
+                                    tutorial.letsGoPhase = 4;
+                                    tutorial.letsGoTimer = 0;
+                                }
+                                break;
+                        }
+                    }
+
+                    // Auto-advance after 16 seconds total
+                    if (tutorial.timer >= 16000) {
+                        completeTutorialStep();
+                    }
+                    break;
+            }
+        }
+
+        function pauseGame() {
+            gamePaused = true;
+        }
+
+        function resumeGame() {
+            gamePaused = false;
+        }
+
+        function completeTutorialStep() {
+            resumeGame();
+
+            if (tutorial.step >= 9) {
+                // Tutorial complete
+                tutorial.active = false;
+                tutorial.tutorialCompleted = true;
+            } else {
+                tutorial.step++;
+                tutorial.timer = 0;
+            }
+        }
+
+        function drawTutorialOverlay() {
+            if (!tutorial.active || !gamePaused) return;
+
+            ctx.save();
+
+            // Semi-transparent overlay
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#FFD700';
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+            ctx.lineWidth = 4;
+            ctx.font = '24px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            switch (tutorial.step) {
+                case 1:
+                    // Movement tutorial
+                    const leftRect = { x: 0, y: canvas.height * 0.8, w: canvas.width * 0.45, h: canvas.height * 0.2 };
+                    const rightRect = { x: canvas.width * 0.55, y: canvas.height * 0.8, w: canvas.width * 0.45, h: canvas.height * 0.2 };
+
+                    // Draw rectangles
+                    ctx.fillRect(leftRect.x, leftRect.y, leftRect.w, leftRect.h);
+                    ctx.strokeRect(leftRect.x, leftRect.y, leftRect.w, leftRect.h);
+                    ctx.fillRect(rightRect.x, rightRect.y, rightRect.w, rightRect.h);
+                    ctx.strokeRect(rightRect.x, rightRect.y, rightRect.w, rightRect.h);
+
+                    // Draw text
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.strokeText('Tap and hold here to move', canvas.width / 2, canvas.height * 0.7);
+                    ctx.fillText('Tap and hold here to move', canvas.width / 2, canvas.height * 0.7);
+                    ctx.strokeText('in either direction', canvas.width / 2, canvas.height * 0.75);
+                    ctx.fillText('in either direction', canvas.width / 2, canvas.height * 0.75);
+                    break;
+
+                case 3:
+                    // Shooting tutorial - 10% smaller overall
+                    const shootRect = {
+                        x: canvas.width * 0.05,
+                        y: canvas.height * 0.025,
+                        w: canvas.width * 0.9,
+                        h: canvas.height * 0.675
+                    };
+
+                    ctx.fillRect(shootRect.x, shootRect.y, shootRect.w, shootRect.h);
+                    ctx.strokeRect(shootRect.x, shootRect.y, shootRect.w, shootRect.h);
+
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.strokeText('Tap and hold here to shoot', canvas.width / 2, canvas.height / 2);
+                    ctx.fillText('Tap and hold here to shoot', canvas.width / 2, canvas.height / 2);
+                    break;
+
+                case 5:
+                    // Coin tutorial
+                    const coin = coins.find(c => c.z > 0 && c.z < 1500);
+                    if (coin) {
+                        const pos = project3D(coin.x, 0, coin.z);
+                        const size = 60;
+
+                        ctx.fillRect(pos.x - size, pos.y - size, size * 2, size * 2);
+                        ctx.strokeRect(pos.x - size, pos.y - size, size * 2, size * 2);
+
+                        ctx.fillStyle = 'white';
+                        ctx.strokeStyle = 'black';
+                        ctx.lineWidth = 2;
+                        ctx.strokeText('Pick up coin for +100 points', canvas.width / 2, pos.y - size - 40);
+                        ctx.fillText('Pick up coin for +100 points', canvas.width / 2, pos.y - size - 40);
+                    }
+                    break;
+
+                case 7:
+                    // Gate tutorial - properly aligned around both gates
+                    const gate = gates.find(g => g.z > 0 && g.z < 1500 && !g.passed);
+                    if (gate) {
+                        const pos = project3D(0, -50, gate.z);
+                        const gateWidth = 250 * pos.scale; // Individual gate width
+                        const gateHeight = 160 * pos.scale;
+                        const gateSpacing = 20 * pos.scale; // Space between gates
+
+                        // Total span: left gate + spacing + right gate + padding
+                        const totalWidth = (gateWidth + gateSpacing + gateWidth) + 60 * pos.scale; // 60*scale padding
+                        const totalHeight = gateHeight + 40 * pos.scale; // 40*scale padding
+
+                        const rectX = pos.x - totalWidth / 2;
+                        const rectY = pos.y - gateHeight - 20 * pos.scale;
+
+                        ctx.fillRect(rectX, rectY, totalWidth, totalHeight);
+                        ctx.strokeRect(rectX, rectY, totalWidth, totalHeight);
+
+                        ctx.fillStyle = 'white';
+                        ctx.strokeStyle = 'black';
+                        ctx.lineWidth = 2;
+                        ctx.strokeText('Cross gates to level up', canvas.width / 2, rectY - 40);
+                        ctx.fillText('Cross gates to level up', canvas.width / 2, rectY - 40);
+                        ctx.strokeText('and gain ammo', canvas.width / 2, rectY - 10);
+                        ctx.fillText('and gain ammo', canvas.width / 2, rectY - 10);
+                    }
+                    break;
+
+                case 9:
+                    // Final tips tutorial - 90% screen coverage
+                    const finalRect = {
+                        x: canvas.width * 0.05,
+                        y: canvas.height * 0.05,
+                        w: canvas.width * 0.9,
+                        h: canvas.height * 0.9
+                    };
+
+                    ctx.fillRect(finalRect.x, finalRect.y, finalRect.w, finalRect.h);
+                    ctx.strokeRect(finalRect.x, finalRect.y, finalRect.w, finalRect.h);
+
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.font = '20px "Press Start 2P", monospace';
+
+                    // Draw tips with text wrapping
+                    const tipStartY = canvas.height * 0.15;
+                    const lineHeight = 35;
+                    const maxWidth = finalRect.w - 40; // Padding from rectangle edges
+                    let currentY = tipStartY;
+
+                    for (let i = 0; i < tutorial.currentTipIndex && i < tutorial.finalTips.length; i++) {
+                        const tip = `• ${tutorial.finalTips[i]}`;
+                        const words = tip.split(' ');
+                        let line = '';
+
+                        for (let word of words) {
+                            const testLine = line + (line ? ' ' : '') + word;
+                            const metrics = ctx.measureText(testLine);
+
+                            if (metrics.width > maxWidth && line !== '') {
+                                // Draw current line and start new one
+                                ctx.strokeText(line, canvas.width / 2, currentY);
+                                ctx.fillText(line, canvas.width / 2, currentY);
+                                currentY += lineHeight;
+                                line = word;
+                            } else {
+                                line = testLine;
+                            }
+                        }
+
+                        // Draw the last line
+                        if (line) {
+                            ctx.strokeText(line, canvas.width / 2, currentY);
+                            ctx.fillText(line, canvas.width / 2, currentY);
+                            currentY += lineHeight * 1.5; // Extra spacing between tips
+                        }
+                    }
+
+                    // Draw LET'S GO if ready - twice as big, vertical layout with sharp pulsing
+                    if (tutorial.showingLetsGo) {
+                        const letsGoBaseY = canvas.height * 0.7;
+                        const textSpacing = 80; // Vertical spacing between LET'S and GO
+                        ctx.font = '64px "Press Start 2P", monospace';
+
+                        // Continuous sharp pulse after initial animations (for clicking hint)
+                        let pulseScale = 1;
+                        if (tutorial.letsGoPhase >= 4) {
+                            const pulseProgress = (Date.now() % 1000) / 1000; // 1 second cycle
+                            pulseScale = 1 + Math.sin(pulseProgress * Math.PI) * 0.3; // Sharp pulse like initial animation
+                        }
+
+                        // LET'S (above)
+                        if (tutorial.letsGoPhase >= 0) {
+                            let letsScale = 1;
+                            if (tutorial.letsGoPhase === 1) {
+                                // Growing animation
+                                const progress = tutorial.letsGoTimer / 300;
+                                letsScale = 1 + Math.sin(progress * Math.PI) * 0.5;
+                            } else if (tutorial.letsGoPhase > 1) {
+                                letsScale = 1.2;
+                            }
+
+                            // Apply continuous sharp pulse if animations are done
+                            if (tutorial.letsGoPhase >= 4) {
+                                letsScale *= pulseScale;
+                            }
+
+                            ctx.save();
+                            ctx.font = `${64 * letsScale}px "Press Start 2P", monospace`;
+                            ctx.strokeText("LET'S", canvas.width / 2, letsGoBaseY - textSpacing);
+                            ctx.fillText("LET'S", canvas.width / 2, letsGoBaseY - textSpacing);
+                            ctx.restore();
+                        }
+
+                        // GO (below)
+                        if (tutorial.letsGoPhase >= 2) {
+                            let goScale = 1;
+                            if (tutorial.letsGoPhase === 3) {
+                                // Growing animation
+                                const progress = tutorial.letsGoTimer / 300;
+                                goScale = 1 + Math.sin(progress * Math.PI) * 0.5;
+                            } else if (tutorial.letsGoPhase > 3) {
+                                goScale = 1.2;
+                            }
+
+                            // Apply continuous sharp pulse if animations are done
+                            if (tutorial.letsGoPhase >= 4) {
+                                goScale *= pulseScale;
+                            }
+
+                            ctx.save();
+                            ctx.font = `${64 * goScale}px "Press Start 2P", monospace`;
+                            ctx.strokeText("GO", canvas.width / 2, letsGoBaseY + textSpacing);
+                            ctx.fillText("GO", canvas.width / 2, letsGoBaseY + textSpacing);
+                            ctx.restore();
+                        }
+                    }
+                    break;
+            }
+
+            ctx.restore();
+        }
+
+        function handleTutorialInput(x, y) {
+            if (!tutorial.active || !gamePaused) return false;
+
+            switch (tutorial.step) {
+                case 1:
+                    // Movement tutorial - check if clicked in left or right area
+                    if (y > canvas.height * 0.8) {
+                        if (x < canvas.width * 0.45 || x > canvas.width * 0.55) {
+                            completeTutorialStep();
+                            return true;
+                        }
+                    }
+                    break;
+
+                case 3:
+                    // Shooting tutorial - check if clicked in shooting area (now 10% smaller)
+                    if (x >= canvas.width * 0.05 && x <= canvas.width * 0.95 &&
+                        y >= canvas.height * 0.025 && y <= canvas.height * 0.7) {
+                        // Enable shooting AND advance tutorial
+                        shooting = true;
+                        completeTutorialStep();
+                        return true;
+                    }
+                    break;
+
+                case 5:
+                    // Coin tutorial - check if clicked on coin area
+                    const coin = coins.find(c => c.z > 0 && c.z < 1500);
+                    if (coin) {
+                        const pos = project3D(coin.x, 0, coin.z);
+                        const size = 60;
+                        if (x >= pos.x - size && x <= pos.x + size &&
+                            y >= pos.y - size && y <= pos.y + size) {
+                            completeTutorialStep();
+                            return true;
+                        }
+                    }
+                    break;
+
+                case 7:
+                    // Gate tutorial - check if clicked on gate area (updated for new scaled dimensions)
+                    const gate = gates.find(g => g.z > 0 && g.z < 1500 && !g.passed);
+                    if (gate) {
+                        const pos = project3D(0, -50, gate.z);
+                        const gateWidth = 250 * pos.scale;
+                        const gateHeight = 160 * pos.scale;
+                        const gateSpacing = 20 * pos.scale;
+                        const totalWidth = (gateWidth + gateSpacing + gateWidth) + 60 * pos.scale;
+                        const totalHeight = gateHeight + 40 * pos.scale;
+                        const rectX = pos.x - totalWidth / 2;
+                        const rectY = pos.y - gateHeight - 20 * pos.scale;
+
+                        if (x >= rectX && x <= rectX + totalWidth &&
+                            y >= rectY && y <= rectY + totalHeight) {
+                            completeTutorialStep();
+                            return true;
+                        }
+                    }
+                    break;
+
+                case 9:
+                    // Final tips tutorial - click anywhere on the 90% rectangle
+                    const finalRect = {
+                        x: canvas.width * 0.05,
+                        y: canvas.height * 0.05,
+                        w: canvas.width * 0.9,
+                        h: canvas.height * 0.9
+                    };
+
+                    if (x >= finalRect.x && x <= finalRect.x + finalRect.w &&
+                        y >= finalRect.y && y <= finalRect.y + finalRect.h) {
+                        completeTutorialStep();
+                        return true;
+                    }
+                    break;
+            }
+
+            return false;
         }
 
         // Music system
@@ -1409,9 +1892,20 @@
         }
 
         function updateGame(dt) {
-            tunnelOffset += dt * 5;
-            gameTime += dt;
-            backgroundOffset += dt;
+            // Always update tutorial (even when paused for auto-advance to work)
+            if (tutorial.active && !tutorial.tutorialCompleted) {
+                updateTutorial(dt);
+            }
+
+            // Only update game world when not paused
+            if (!gamePaused) {
+                tunnelOffset += dt * 5;
+                gameTime += dt;
+                backgroundOffset += dt;
+            }
+
+            // Skip game logic updates when paused
+            if (gamePaused) return;
 
             let wasMoving = player.movingRight;
             player.movingRight = false;
@@ -1978,6 +2472,9 @@
             drawPlayer();
             drawPlayerHitSparks();
 
+            // Draw tutorial overlay last (on top of everything)
+            drawTutorialOverlay();
+
             requestAnimationFrame(gameLoop);
         }
 
@@ -2097,23 +2594,62 @@
             gameTime = 0;
             lastTime = 0;
             backgroundOffset = 0;
+            bossEncountered = false;
+
+            // Reset tutorial state
+            tutorial = {
+                active: false,
+                step: 0,
+                maxSteps: 8,
+                timer: 0,
+                stepStartTime: 0,
+                tutorialCompleted: false,
+                finalTips: [
+                    "get answer streaks to multiply coin bonus",
+                    "levels are your lives",
+                    "find more guns, shoot more bots",
+                    "defeat the boss for a big score multiplier"
+                ],
+                currentTipIndex: 0,
+                tipTimer: 0,
+                showingLetsGo: false,
+                letsGoPhase: 0,
+                letsGoTimer: 0
+            };
 
             gameRunning = true;
+            gamePaused = false;
+
+            // Start tutorial
+            startTutorial();
+
             startMusic();
             requestAnimationFrame(gameLoop);
         }
 
-        // Input handling
+        // Input handling with tutorial integration
         canvas.addEventListener('mousemove', e => {
             const rect = canvas.getBoundingClientRect();
             mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
             usingKeyboard = false;
         });
 
-        canvas.addEventListener('mousedown', () => shooting = true);
+        canvas.addEventListener('mousedown', e => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+            // Check tutorial input first
+            if (handleTutorialInput(x, y)) {
+                return;
+            }
+
+            shooting = true;
+        });
+
         canvas.addEventListener('mouseup', () => shooting = false);
 
-        // Mobile touch controls
+        // Mobile touch controls with tutorial integration
         let moveTouch = null;
         let shootTouch = null;
 
@@ -2124,6 +2660,11 @@
             for (let touch of e.changedTouches) {
                 const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
                 const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+
+                // Check tutorial input first
+                if (handleTutorialInput(x, y)) {
+                    return;
+                }
 
                 if (y > canvas.height * 0.8) {
                     moveTouch = touch.identifier;
