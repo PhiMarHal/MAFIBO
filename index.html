@@ -965,7 +965,6 @@
         let moveLeft = false;
         let moveRight = false;
         let usingKeyboard = false;
-        let hasUsedTouch = false; // Track if touch controls have been used
 
         // Sliding movement system
         let isSliding = false;
@@ -1784,30 +1783,25 @@
                 let deltaX = 0;
 
                 if (isSliding && slidingInBottomArea) {
-                    // Use simple direction-based movement like the old tap system
-                    // Compare current finger position to player position to determine direction
-                    const fingerWorldX = ((slideCurrentX / canvas.width) - 0.5) * 2;
-                    const deadZone = 0.1; // Small dead zone to prevent jitter
+                    // Use sliding movement with much softer sensitivity
+                    const slideDistance = slideCurrentX - slideStartX;
+                    const slideSpeed = slideDistance * 0.001; // Much softer - reduced from 0.008
+                    deltaX = slideSpeed;
+                    usingKeyboard = false;
 
-                    if (fingerWorldX > player.x + deadZone) {
-                        // Finger is to the right, move right
-                        deltaX = dt * 3;
+                    // Determine direction for sprite flipping
+                    if (deltaX > 0.01) {
                         player.movingRight = true;
                         if (!player.flipped) {
                             player.flipped = true;
                             player.angle = -player.angle;
                         }
-                    } else if (fingerWorldX < player.x - deadZone) {
-                        // Finger is to the left, move left  
-                        deltaX = -dt * 3;
+                    } else if (deltaX < -0.01) {
                         if (player.flipped) {
                             player.flipped = false;
                             player.angle = -player.angle;
                         }
                     }
-                    // If finger is within dead zone, don't move (like old system when not pressing)
-
-                    usingKeyboard = false;
                 } else if (moveLeft) {
                     deltaX = -dt * 3;
                     usingKeyboard = true;
@@ -1828,8 +1822,9 @@
                 player.x += deltaX;
             }
 
-            if (!moveLeft && !moveRight && !usingKeyboard && !isSliding && !hasUsedTouch) {
-                // Only follow mouse if we haven't used touch controls (desktop only)
+            if (!moveLeft && !moveRight && !usingKeyboard && !isSliding) {
+                // Only follow mouse if we're not using sliding controls
+                // This prevents snapping back to center after sliding
                 const targetX = ((mouseX / canvas.width) - 0.5) * 2;
                 const deltaX = targetX - player.x;
                 if (Math.abs(deltaX) > 0.01) {
@@ -2509,7 +2504,6 @@
 
             gameRunning = true;
             gamePaused = false;
-            hasUsedTouch = false; // Reset for new game
 
             // Start tutorial
             startTutorial();
@@ -2572,7 +2566,6 @@
 
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
-            hasUsedTouch = true;
             const rect = canvas.getBoundingClientRect();
 
             for (let touch of e.changedTouches) {
