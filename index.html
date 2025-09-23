@@ -953,6 +953,83 @@
             }
         }
 
+        // Page Visibility API for pausing music when tab is minimized/hidden
+        let wasPlayingBeforeHidden = false;
+
+        function handleVisibilityChange() {
+            if (document.hidden) {
+                // Page is now hidden (minimized, switched tabs, etc.)
+                wasPlayingBeforeHidden = musicEnabled && currentTrack && !currentTrack.paused;
+
+                if (currentTrack && !currentTrack.paused) {
+                    currentTrack.pause();
+                }
+                if (nextTrack && !nextTrack.paused) {
+                    nextTrack.pause();
+                }
+
+                // Clear any pending timers
+                if (nextTrackTimer) {
+                    clearTimeout(nextTrackTimer);
+                    nextTrackTimer = null;
+                }
+                if (pauseTimer) {
+                    clearTimeout(pauseTimer);
+                    pauseTimer = null;
+                }
+            } else {
+                // Page is now visible again
+                if (wasPlayingBeforeHidden && musicEnabled && gameRunning) {
+                    // Resume current track if it was playing
+                    if (currentTrack) {
+                        currentTrack.play().catch(e => {
+                            console.warn('Failed to resume track:', e);
+                        });
+
+                        // Restart the next track timer if needed
+                        if (!nextTrack && trackQueue.length > 0) {
+                            nextTrackTimer = setTimeout(() => {
+                                if (trackQueue.length === 0) {
+                                    shuffleTracks();
+                                }
+                                const upcomingTrackNum = trackQueue[0];
+                                nextTrack = loadTrack(upcomingTrackNum);
+                            }, 60000);
+                        }
+                    } else if (musicEnabled && gameRunning) {
+                        // If no current track, start playing again
+                        playNextTrack();
+                    }
+                }
+                wasPlayingBeforeHidden = false;
+            }
+        }
+
+        // Add the event listener
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Also handle window blur/focus as backup for older browsers
+        window.addEventListener('blur', () => {
+            if (!document.hidden) { // Only if visibility API didn't already handle it
+                handleVisibilityChange();
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            if (!document.hidden) { // Only if visibility API didn't already handle it
+                // Small delay to ensure page is fully focused
+                setTimeout(() => {
+                    if (!document.hidden && wasPlayingBeforeHidden && musicEnabled && gameRunning) {
+                        if (currentTrack && currentTrack.paused) {
+                            currentTrack.play().catch(e => {
+                                console.warn('Failed to resume track on focus:', e);
+                            });
+                        }
+                    }
+                }, 100);
+            }
+        });
+
         // UI Animation states
         let ammoShake = 0;
         let ammoPulse = 0;
