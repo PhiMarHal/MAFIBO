@@ -56,17 +56,21 @@
         }
 
         #introScreen h1 {
-            font-size: calc(var(--container-width, 800px) * 0.12);
+            font-size: clamp(24px, 8vmin, 64px);
+            /* Responsive font size without custom properties */
             color: white;
             text-shadow: 6px 6px 0 #000;
-            margin-bottom: 0;
-            margin-top: 0;
+            margin: 0;
             animation: pulse 2s infinite;
             z-index: 1002;
             position: absolute;
             top: 8%;
             left: 50%;
             transform: translateX(-50%);
+            text-align: center;
+            /* Additional centering insurance */
+            white-space: nowrap;
+            /* Prevent text wrapping issues */
         }
 
         @keyframes pulse {
