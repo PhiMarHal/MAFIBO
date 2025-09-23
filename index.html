@@ -965,6 +965,7 @@
         let moveLeft = false;
         let moveRight = false;
         let usingKeyboard = false;
+        let hasUsedTouch = false; // Track if touch controls have been used
 
         // Sliding movement system
         let isSliding = false;
@@ -1783,25 +1784,29 @@
                 let deltaX = 0;
 
                 if (isSliding && slidingInBottomArea) {
-                    // Use sliding movement with much softer sensitivity
-                    const slideDistance = slideCurrentX - slideStartX;
-                    const slideSpeed = slideDistance * 0.001; // Much softer - reduced from 0.008
-                    deltaX = slideSpeed;
-                    usingKeyboard = false;
+                    // True slide movement - based on delta from start position
+                    const slideDelta = slideCurrentX - slideStartX;
+                    const slideThreshold = 30; // Pixels to trigger movement
 
-                    // Determine direction for sprite flipping
-                    if (deltaX > 0.01) {
+                    if (slideDelta > slideThreshold) {
+                        // Sliding right - continuous movement while sliding
+                        deltaX = dt * 3;
                         player.movingRight = true;
                         if (!player.flipped) {
                             player.flipped = true;
                             player.angle = -player.angle;
                         }
-                    } else if (deltaX < -0.01) {
+                    } else if (slideDelta < -slideThreshold) {
+                        // Sliding left - continuous movement while sliding
+                        deltaX = -dt * 3;
                         if (player.flipped) {
                             player.flipped = false;
                             player.angle = -player.angle;
                         }
                     }
+                    // If within threshold, don't move (dead zone in center)
+
+                    usingKeyboard = false;
                 } else if (moveLeft) {
                     deltaX = -dt * 3;
                     usingKeyboard = true;
@@ -1822,9 +1827,8 @@
                 player.x += deltaX;
             }
 
-            if (!moveLeft && !moveRight && !usingKeyboard && !isSliding) {
-                // Only follow mouse if we're not using sliding controls
-                // This prevents snapping back to center after sliding
+            if (!moveLeft && !moveRight && !usingKeyboard && !isSliding && !hasUsedTouch) {
+                // Only follow mouse if we haven't used touch controls (desktop only)
                 const targetX = ((mouseX / canvas.width) - 0.5) * 2;
                 const deltaX = targetX - player.x;
                 if (Math.abs(deltaX) > 0.01) {
@@ -2504,6 +2508,7 @@
 
             gameRunning = true;
             gamePaused = false;
+            hasUsedTouch = false; // Reset for new game
 
             // Start tutorial
             startTutorial();
@@ -2566,6 +2571,7 @@
 
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
+            hasUsedTouch = true;
             const rect = canvas.getBoundingClientRect();
 
             for (let touch of e.changedTouches) {
