@@ -659,8 +659,8 @@
                         }
                     }
 
-                    // Auto-advance after 16 seconds total
-                    if (tutorial.timer >= 16000) {
+                    // Auto-advance after 20 seconds total
+                    if (tutorial.timer >= 20000) {
                         completeTutorialStep();
                     }
                     break;
@@ -706,24 +706,19 @@
 
             switch (tutorial.step) {
                 case 1:
-                    // Movement tutorial
-                    const leftRect = { x: 0, y: canvas.height * 0.8, w: canvas.width * 0.45, h: canvas.height * 0.2 };
-                    const rightRect = { x: canvas.width * 0.55, y: canvas.height * 0.8, w: canvas.width * 0.45, h: canvas.height * 0.2 };
+                    // Movement tutorial - one big rectangle for sliding
+                    const moveRect = { x: 0, y: canvas.height * 0.8, w: canvas.width, h: canvas.height * 0.2 };
 
-                    // Draw rectangles
-                    ctx.fillRect(leftRect.x, leftRect.y, leftRect.w, leftRect.h);
-                    ctx.strokeRect(leftRect.x, leftRect.y, leftRect.w, leftRect.h);
-                    ctx.fillRect(rightRect.x, rightRect.y, rightRect.w, rightRect.h);
-                    ctx.strokeRect(rightRect.x, rightRect.y, rightRect.w, rightRect.h);
+                    // Draw rectangle
+                    ctx.fillRect(moveRect.x, moveRect.y, moveRect.w, moveRect.h);
+                    ctx.strokeRect(moveRect.x, moveRect.y, moveRect.w, moveRect.h);
 
                     // Draw text
                     ctx.fillStyle = 'white';
                     ctx.strokeStyle = 'black';
                     ctx.lineWidth = 2;
-                    ctx.strokeText('Tap and hold here to move', canvas.width / 2, canvas.height * 0.7);
-                    ctx.fillText('Tap and hold here to move', canvas.width / 2, canvas.height * 0.7);
-                    ctx.strokeText('in either direction', canvas.width / 2, canvas.height * 0.75);
-                    ctx.fillText('in either direction', canvas.width / 2, canvas.height * 0.75);
+                    ctx.strokeText('Slide to move', canvas.width / 2, canvas.height * 0.72);
+                    ctx.fillText('Slide to move', canvas.width / 2, canvas.height * 0.72);
                     break;
 
                 case 3:
@@ -913,12 +908,10 @@
 
             switch (tutorial.step) {
                 case 1:
-                    // Movement tutorial - check if clicked in left or right area
+                    // Movement tutorial - check if clicked/dragged in bottom area
                     if (y > canvas.height * 0.8) {
-                        if (x < canvas.width * 0.45 || x > canvas.width * 0.55) {
-                            completeTutorialStep();
-                            return true;
-                        }
+                        completeTutorialStep();
+                        return true;
                     }
                     break;
 
@@ -1103,6 +1096,12 @@
         let moveLeft = false;
         let moveRight = false;
         let usingKeyboard = false;
+
+        // Sliding movement system
+        let isSliding = false;
+        let slideStartX = 0;
+        let slideCurrentX = 0;
+        let slidingInBottomArea = false;
 
         // Spawn timers
         let enemySpawnTimer = 0;
@@ -1910,22 +1909,47 @@
             let wasMoving = player.movingRight;
             player.movingRight = false;
 
-            if (moveLeft) {
-                player.x -= dt * 3;
-                usingKeyboard = true;
-                if (player.flipped) {
-                    player.flipped = false;
-                    player.angle = -player.angle;
+            if (moveLeft || moveRight || isSliding) {
+                let deltaX = 0;
+
+                if (isSliding && slidingInBottomArea) {
+                    // Use sliding movement
+                    const slideDistance = slideCurrentX - slideStartX;
+                    const slideSpeed = slideDistance * 0.008; // Adjust sensitivity
+                    deltaX = slideSpeed;
+                    usingKeyboard = false;
+
+                    // Determine direction for sprite flipping
+                    if (deltaX > 0) {
+                        player.movingRight = true;
+                        if (!player.flipped) {
+                            player.flipped = true;
+                            player.angle = -player.angle;
+                        }
+                    } else if (deltaX < 0) {
+                        if (player.flipped) {
+                            player.flipped = false;
+                            player.angle = -player.angle;
+                        }
+                    }
+                } else if (moveLeft) {
+                    deltaX = -dt * 3;
+                    usingKeyboard = true;
+                    if (player.flipped) {
+                        player.flipped = false;
+                        player.angle = -player.angle;
+                    }
+                } else if (moveRight) {
+                    deltaX = dt * 3;
+                    usingKeyboard = true;
+                    player.movingRight = true;
+                    if (!player.flipped) {
+                        player.flipped = true;
+                        player.angle = -player.angle;
+                    }
                 }
-            }
-            if (moveRight) {
-                player.x += dt * 3;
-                usingKeyboard = true;
-                player.movingRight = true;
-                if (!player.flipped) {
-                    player.flipped = true;
-                    player.angle = -player.angle;
-                }
+
+                player.x += deltaX;
             }
 
             if (!moveLeft && !moveRight && !usingKeyboard) {
@@ -2630,8 +2654,16 @@
         // Input handling with tutorial integration
         canvas.addEventListener('mousemove', e => {
             const rect = canvas.getBoundingClientRect();
-            mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+            mouseX = x;
             usingKeyboard = false;
+
+            // Handle sliding movement if mouse is down in bottom area
+            if (isSliding && slidingInBottomArea) {
+                slideCurrentX = x;
+            }
         });
 
         canvas.addEventListener('mousedown', e => {
@@ -2644,12 +2676,24 @@
                 return;
             }
 
-            shooting = true;
+            // Check if starting slide in bottom area
+            if (y > canvas.height * 0.8) {
+                isSliding = true;
+                slidingInBottomArea = true;
+                slideStartX = x;
+                slideCurrentX = x;
+            } else {
+                shooting = true;
+            }
         });
 
-        canvas.addEventListener('mouseup', () => shooting = false);
+        canvas.addEventListener('mouseup', () => {
+            shooting = false;
+            isSliding = false;
+            slidingInBottomArea = false;
+        });
 
-        // Mobile touch controls with tutorial integration
+        // Mobile touch controls with tutorial integration and sliding movement
         let moveTouch = null;
         let shootTouch = null;
 
@@ -2667,14 +2711,12 @@
                 }
 
                 if (y > canvas.height * 0.8) {
+                    // Start sliding movement
                     moveTouch = touch.identifier;
-                    if (x < canvas.width / 2) {
-                        moveLeft = true;
-                        moveRight = false;
-                    } else {
-                        moveRight = true;
-                        moveLeft = false;
-                    }
+                    isSliding = true;
+                    slidingInBottomArea = true;
+                    slideStartX = x;
+                    slideCurrentX = x;
                 } else {
                     shootTouch = touch.identifier;
                     shooting = true;
@@ -2689,13 +2731,7 @@
             for (let touch of e.changedTouches) {
                 if (touch.identifier === moveTouch) {
                     const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
-                    if (x < canvas.width / 2) {
-                        moveLeft = true;
-                        moveRight = false;
-                    } else {
-                        moveRight = true;
-                        moveLeft = false;
-                    }
+                    slideCurrentX = x;
                 }
             }
         });
@@ -2706,8 +2742,8 @@
             for (let touch of e.changedTouches) {
                 if (touch.identifier === moveTouch) {
                     moveTouch = null;
-                    moveLeft = false;
-                    moveRight = false;
+                    isSliding = false;
+                    slidingInBottomArea = false;
                 }
                 if (touch.identifier === shootTouch) {
                     shootTouch = null;
