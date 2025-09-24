@@ -1002,12 +1002,14 @@
 
         function getRank(level) {
             if (level < 10) return 'NEWBIE';
-            if (level < 20) return 'ROOKIE';
-            if (level < 30) return 'FIGHTER';
-            if (level < 50) return 'WARRIOR';
-            if (level < 70) return 'CHAMPION';
-            if (level < 90) return 'LEGEND';
-            if (level < 100) return 'MASTER';
+            if (level < 20) return 'NOVICE';
+            if (level < 30) return 'EXPERT';
+            if (level < 40) return 'MASTER';
+            if (level < 50) return 'TOURNEY CHAMP';
+            if (level < 60) return 'SAM FAVORITE';
+            if (level < 70) return 'REMMY INCARNATE';
+            if (level < 80) return 'CREATOR';
+            if (level < 90) return 'JAM VETERAN';
             return 'BOSS SLAYER';
         }
 
@@ -2551,6 +2553,7 @@
 
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
+            e.stopPropagation();
             hasUsedTouch = true;
             const rect = canvas.getBoundingClientRect();
 
@@ -2577,6 +2580,7 @@
 
         canvas.addEventListener('touchmove', e => {
             e.preventDefault();
+            e.stopPropagation();
             const rect = canvas.getBoundingClientRect();
 
             for (let touch of e.changedTouches) {
@@ -2592,6 +2596,7 @@
 
         canvas.addEventListener('touchend', e => {
             e.preventDefault();
+            e.stopPropagation();
 
             for (let touch of e.changedTouches) {
                 if (touch.identifier === moveTouch) {
@@ -2627,10 +2632,6 @@
             if (e.code === 'ArrowLeft' || e.code === 'KeyA') moveLeft = false;
             if (e.code === 'ArrowRight' || e.code === 'KeyD') moveRight = false;
         });
-
-        document.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-        document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-        document.addEventListener('touchend', e => e.preventDefault(), { passive: false });
 
         window.addEventListener('message', e => e.stopPropagation(), true);
 
